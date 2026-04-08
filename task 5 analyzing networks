@@ -4,81 +4,98 @@
 if (!require("geiger")) install.packages("geiger")
 if (!require("ape")) install.packages("ape")
 if (!require("phytools")) install.packages("phytools")
+if (!require("bipartite")) install.packages("bipartite")
+if (!require("ggplot2")) install.packages("ggplot2")
+if (!require("viridis")) install.packages("viridis")
 
 library(geiger)
 library(ape)
 library(phytools)
-
-# --- 2. HELPER FUNCTION ---
-rescale_vector <- function(x, new_range = c(0, 1)) {
-  if (length(unique(x)) == 1) return(rep(mean(new_range), length(x)))
-  old_min <- min(x, na.rm = TRUE)
-  old_max <- max(x, na.rm = TRUE)
-  return(new_range[1] + (x - old_min) * (new_range[2] - new_range[1]) / (old_max - old_min))
-}
+library(bipartite)
+library(ggplot2)
+library(viridis)
 
 # ===================================================================
-# --- 3. THE ANALYZE_NETWORK FUNCTION ---
+# --- 2. SIMULATION FUNCTION ---
 # ===================================================================
-# This function simulates, plots, and returns basic metrics
-analyze_network <- function(n_spe_L=20, n_spe_H=20, alpha_L=5, alpha_H=0.5, p_match=0.3) {
+get_network_connectance <- function(n_spe_L, n_spe_H, alpha_val, p_match_val) {
   
-  # A. Simulate Trees
+  # 1. Simulate Trees
   tree_L <- sim.bdtree(b = 0.1, d = 0, stop = "taxa", n = n_spe_L)
   tree_H <- sim.bdtree(b = 0.1, d = 0, stop = "taxa", n = n_spe_H)
-  tree_L$tip.label <- sprintf("L_%.3d", 1:n_spe_L)
-  tree_H$tip.label <- sprintf("H_%.3d", 1:n_spe_H)
-
-  # B. Evolve Traits (OU Model)
-  trait_L_raw <- rTraitCont(tree_L, model = "OU", alpha = alpha_L)
-  trait_H_raw <- rTraitCont(tree_H, model = "OU", alpha = alpha_H)
-  trait_L <- rescale_vector(trait_L_raw)
-  trait_H <- rescale_vector(trait_H_raw)
-
-  # C. Matching Rule
-  d_matrix <- matrix(runif(n_spe_L * n_spe_H, min = 0, max = p_match), nrow = n_spe_L, ncol = n_spe_H)
+  
+  # 2. Simulate Traits (OU model) 
+  # Note: No rescaling. High alpha will naturally pull traits toward 0.
+  trait_L <- rTraitCont(tree_L, model = "OU", alpha = alpha_val)
+  trait_H <- rTraitCont(tree_H, model = "OU", alpha = alpha_val)
+  
+  # 3. Create Interaction Web
+  # Interaction occurs if the distance between traits is less than a random threshold
+  d_matrix <- matrix(runif(n_spe_L * n_spe_H, min = 0, max = p_match_val), 
+                     nrow = n_spe_L, ncol = n_spe_H)
+  
   web <- outer(trait_L, trait_H, FUN = function(x, y) abs(x - y) < d_matrix)
   web <- ifelse(web, 1, 0)
   
-  # Ensure no empty rows/cols
-  for (i in 1:nrow(web)) if(sum(web[i,])==0) web[i, sample(1:ncol(web),1)] <- 1
-  for (j in 1:ncol(web)) if(sum(web[,j])==0) web[sample(1:nrow(web),1), j] <- 1
-
-  # D. Prepare Alignment for Plotting
-  tree_L_reordered <- reorder(tree_L, "postorder")
-  tip_order_L <- tree_L_reordered$tip.label[tree_L_reordered$edge[tree_L_reordered$edge[, 2] <= n_spe_L, 2]]
-  tree_H_reordered <- reorder(tree_H, "postorder")
-  tip_order_H <- tree_H_reordered$tip.label[tree_H_reordered$edge[tree_H_reordered$edge[, 2] <= n_spe_H, 2]]
+  # 4. Handle Empty Rows/Cols (Required for bipartite functions)
+  if (sum(web) == 0) return(0) # Return 0 if no interactions at all
   
-  web_reordered <- web[tip_order_L, tip_order_H]
+  row_sums <- rowSums(web)
+  col_sums <- colSums(web)
   
-  # E. Metrics Calculation
-  connectance <- sum(web) / (n_spe_L * n_spe_H)
-  degree_L <- rowSums(web) # Interactions per Lower species
-  degree_H <- colSums(web) # Interactions per Higher species
-
-  # F. Plotting Logic
-  layout_matrix <- matrix(c(0, 1, 2, 3), nrow=2, ncol=2)
-  layout(layout_matrix, widths=c(1, 3), heights=c(1, 3))
+  if (any(row_sums == 0)) {
+    for (i in which(row_sums == 0)) web[i, sample(1:n_spe_H, 1)] <- 1
+  }
+  if (any(col_sums == 0)) {
+    for (j in which(col_sums == 0)) web[sample(1:n_spe_L, 1), j] <- 1
+  }
   
-  # Top Phylogeny
-  par(mar = c(0, 0, 1, 1))
-  plot(tree_H_reordered, direction = "rightwards", show.tip.label = FALSE)
-  
-  # Left Phylogeny + Info
-  par(mar = c(1, 1, 0, 0))
-  plot(tree_L_reordered, direction = "downwards", show.tip.label = FALSE)
-  text(x = 1, y = max(node.depth.edgelength(tree_L_reordered)) * 0.8,
-       labels = paste0("Conn: ", round(connectance, 3), 
-                       "\nAvg Deg: ", round(mean(degree_L), 1)), pos=4, cex=0.9)
-
-  # Matrix
-  par(mar = c(1, 0, 0, 1))
-  image(x = 1:n_spe_L, y = 1:n_spe_H, z = web_reordered, col = c("white", "black"), axes = FALSE)
-  box()
-  
-  # Return Metrics
-  return(list(connectance=connectance, degree_L=degree_L, degree_H=degree_H))
+  # 5. Calculate Connectance using bipartite package
+  # In bipartite terms, "connectance" is the fraction of realized links
+  res <- networklevel(web, index = "connectance")
+  return(as.numeric(res))
 }
 
-cat("Task 1 finished: Integrated simulation and metric function defined.")
+# ===================================================================
+# --- 3. SET UP PARAMETER GRID ---
+# ===================================================================
+set.seed(123)
+
+# Define the number of combinations (n x n)
+n_sims <- 15 
+
+# Alpha: Higher values = stronger stabilizing selection (traits cluster near 0)
+alpha_range <- seq(0.1, 5, length.out = n_sims)
+
+# p_match: Higher values = easier trait matching
+pmatch_range <- seq(0.01, 1.0, length.out = n_sims)
+
+# Create grid
+results_grid <- expand.grid(alpha = alpha_range, p_match = pmatch_range)
+
+# ===================================================================
+# --- 4. RUN SIMULATIONS ---
+# ===================================================================
+cat("Running simulations...")
+
+results_grid$connectance <- mapply(function(a, p) {
+  get_network_connectance(n_spe_L = 15, n_spe_H = 15, alpha_val = a, p_match_val = p)
+}, results_grid$alpha, results_grid$p_match)
+
+cat("Done.\n")
+
+# ===================================================================
+# --- 5. PLOT RESULTS (Face Plot / Heatmap) ---
+# ===================================================================
+ggplot(results_grid, aes(x = alpha, y = p_match, fill = connectance)) +
+  geom_tile() + 
+  scale_fill_viridis(option = "magma", name = "Connectance") +
+  theme_minimal() +
+  labs(
+    title = "Network Connectance (Conductance)",
+    subtitle = "Varying Stabilizing Selection (Alpha) and Trait Matching (p_match)",
+    x = "Stabilizing Selection (Alpha)",
+    y = "Trait Matching Threshold (p_match)"
+  ) +
+  # Use a slight interpolation for a smoother "surface" look
+  theme(panel.grid = element_blank())
