@@ -1,45 +1,63 @@
-# --- 1. SETUP PARAMETERS ---
+################################################################################
+##                                                                            ##
+##  TASK 1                                                                    ##
+##  Brownian Motion trait evolution -- effect of the rate parameter sigma2   ##
+##                                                                            ##
+##  BACKGROUND                                                                ##
+##  The Brownian Motion (BM) model assumes trait change along a lineage is   ##
+##  a sequence of random normal increments with mean 0 and variance          ##
+##  sigma2 * dt per time step. The parameter sigma2 controls how fast traits ##
+##  diverge: large sigma2 -> wide spread; small sigma2 -> tight clustering.  ##
+##                                                                            ##
+##  Here we simulate a single BM lineage for each of n_drift_levels values   ##
+##  of sigma2 and plot all trajectories on the same axes. Each trajectory    ##
+##  is the cumulative sum of independent N(0, sigma2) increments.            ##
+##                                                                            ##
+##  WHAT YOU SHOULD SEE                                                       ##
+##  Low sigma2 (cool colours) -> tight, slow-wandering trajectories.         ##
+##  High sigma2 (warm colours) -> wide, fast-diverging trajectories.         ##
+##  All trajectories start at 0 and have mean 0, but their variance at       ##
+##  time t grows as sigma2 * t.                                               ##
+##                                                                            ##
+##  QUESTIONS                                                                 ##
+##  1. The variance of a BM trajectory at time t is sigma2 * t. Verify this  ##
+##     by computing var(traj[t, ]) across drift levels at t = 50 and t = 100.##
+##  2. How would you modify the code to simulate OU evolution instead?        ##
+##  3. Which sigma2 value would you consider realistic for floral tube        ##
+##     length (mm) evolving over 1 million years? Justify your answer.       ##
+##                                                                            ##
+################################################################################
+
 set.seed(12)
-n_steps <- 100               # Number of time steps (generations/millions of years)
-n_scenarios <- 10            # Number of drift levels to compare
 
-# Define a sequence of drift intensities (sigma values)
-# Low values = slow evolution (stasis); High values = rapid divergence (drift)
-drift_intensities <- seq(0.01, 0.5, length.out = n_scenarios)
+n_steps       <- 100
+n_drift_levels <- 10
 
-# Initialize a matrix 'B' to store the trait values over time
-# Rows = Time, Columns = Different Drift Scenarios
-B <- matrix(0, nrow = n_steps, ncol = n_scenarios)
+# sigma2 values to compare (variance per time step, not standard deviation)
+sigma2_values <- seq(0.01, 0.5, length.out = n_drift_levels)
 
-# --- 2. SIMULATE BROWNIAN MOTION ---
-# For each drift level, we calculate a cumulative sum of random changes
-for (i in 1:n_scenarios) {
-  # Each step is a random draw from a normal distribution 
-  # The standard deviation is defined by our drift intensity
-  daily_changes <- rnorm(n_steps, mean = 0, sd = drift_intensities[i])
-  
-  # The trait value at any time is the sum of all changes up to that point
-  B[, i] <- cumsum(daily_changes)
+# Each column of traj is one BM trajectory under a different sigma2
+traj <- matrix(0, nrow = n_steps, ncol = n_drift_levels)
+for (i in seq_len(n_drift_levels)) {
+  increments  <- rnorm(n_steps, mean = 0, sd = sqrt(sigma2_values[i]))
+  traj[, i]   <- cumsum(increments)
 }
 
-# --- 3. VISUALIZATION ---
-# Define colors using the "Temps" palette as requested
-cols <- hcl.colors(n_scenarios, "Temps")
+cols <- hcl.colors(n_drift_levels, "Temps")
 
-# Plot the matrix B
-# Each line represents a different level of drift
-matplot(B, 
-        type = "l",           # Use lines
-        col = cols,           # Apply the temperature colors
-        lwd = 2,              # Line width
-        lty = 1,              # Solid line type
-        xlab = "Time Steps", 
-        ylab = "Trait Value",
-        main = "Visualization of Brownian Motion Drift Levels")
+matplot(traj,
+        type = "l",
+        col  = cols,
+        lwd  = 2,
+        lty  = 1,
+        xlab = "Time (generations)",
+        ylab = "Trait value",
+        main = "Task 1 -- Brownian Motion trajectories across sigma2 values")
 
-# Add a legend to help interpret the drift intensities
-legend("topleft", legend = round(drift_intensities, 2), 
-       col = cols, lty = 1, lwd = 2, title = "Drift Rate (sigma)", cex = 0.8)
-
-# Finishing message
-cat("Task 1 finished: Trait drift trajectories simulated. Observe how lines with higher drift (warmer colors) explore a much wider range of trait values over the same amount of time compared to low-drift lines.")
+legend("topleft",
+       legend = round(sigma2_values, 3),
+       col    = cols,
+       lty    = 1,
+       lwd    = 2,
+       title  = "sigma2",
+       cex    = 0.8)
