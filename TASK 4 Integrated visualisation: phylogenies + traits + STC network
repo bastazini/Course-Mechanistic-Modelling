@@ -1,0 +1,173 @@
+################################################################################
+##                                                                            ##
+##  TASK 4                                                                   ##
+##  Integrated visualisation: phylogenies + traits + STC network             ##
+##                                                                            ##
+##  BACKGROUND                                                                ##
+##  This task brings together all components of the model in one figure:     ##
+##    Top-right  -- interaction matrix (rows = L, cols = H, sorted by trait) ##
+##    Top-left   -- empty (parameter label)                                  ##
+##    Bottom-right -- H phylogeny with trait colours at tips                 ##
+##    Bottom-left  -- L phylogeny with trait colours at tips                 ##
+##                                                                            ##
+##  Species are sorted by evolved trait value on both axes. This reveals     ##
+##  the diagonal band produced by the STC rule: species interact when their  ##
+##  trait intervals overlap, so interactions concentrate near the diagonal   ##
+##  when species are sorted by trait mean.                                   ##
+##                                                                            ##
+##  PARAMETERS TO EXPLORE                                                    ##
+##  alpha_L, alpha_H  -- OU pull for each guild (try 0 vs 5)                ##
+##  delta_min/max     -- range of species variability (try narrow vs wide)   ##
+##  sigma2            -- BM variance component                               ##
+##                                                                            ##
+##  QUESTIONS                                                                 ##
+##  1. Set alpha_L = 0 and alpha_H = 5. How does the matrix change?          ##
+##  2. Increase delta_max. What happens to the band width?                   ##
+##  3. What does it mean ecologically when the two phylogenies look very      ##
+##     different in their tip colour spread?                                  ##
+##                                                                            ##
+################################################################################
+
+library(ape)
+library(MASS)
+
+set.seed(12)
+
+# --- Parameters (change these and re-run) ------------------------------------
+n_L       <- 10      # number of pollinator species
+n_H       <- 10      # number of plant species
+alpha_L   <- 5       # OU pull for pollinators (0 = pure BM)
+alpha_H   <- 0.5     # OU pull for plants
+sigma2    <- 0.8     # shared BM variance component
+theta     <- 0       # OU optimum for both guilds
+delta_min <- 0.1     # minimum per-species trait range (delta_V, delta_W)
+delta_max <- 0.6     # maximum per-species trait range
+
+# --- OU covariance matrix (Hansen 1997) --------------------------------------
+cov_OU <- function(tree, alpha, sigma2) {
+  D <- cophenetic(tree) / 2
+  n <- Ntip(tree)
+  V <- matrix(0, n, n)
+  for (i in seq_len(n)) for (j in seq_len(n)) {
+    t_min  <- min(max(D[i,]) / 2, max(D[j,]) / 2)
+    V[i,j] <- (sigma2 / (2 * alpha)) *
+      exp(-alpha * D[i,j]) * (1 - exp(-2 * alpha * t_min))
+  }
+  V + diag(1e-8, n)
+}
+
+# --- Simulate phylogenies ----------------------------------------------------
+tree_L <- chronos(rtree(n_L), quiet = TRUE)
+tree_H <- chronos(rtree(n_H), quiet = TRUE)
+
+tree_L$tip.label <- sprintf("L_%03d", seq_len(n_L))
+tree_H$tip.label <- sprintf("H_%03d", seq_len(n_H))
+
+# --- Evolve trait means under OU ---------------------------------------------
+Sig_L <- if (alpha_L == 0) vcv(tree_L) * sigma2 + diag(1e-8, n_L)
+else cov_OU(tree_L, alpha_L, sigma2)
+Sig_H <- if (alpha_H == 0) vcv(tree_H) * sigma2 + diag(1e-8, n_H)
+else cov_OU(tree_H, alpha_H, sigma2)
+
+trait_L <- as.vector(mvrnorm(1, rep(theta, n_L), Sig_L))
+trait_H <- as.vector(mvrnorm(1, rep(theta, n_H), Sig_H))
+names(trait_L) <- tree_L$tip.label
+names(trait_H) <- tree_H$tip.label
+
+# --- Per-species trait ranges (delta) ----------------------------------------
+delta_L <- setNames(runif(n_L, delta_min, delta_max), names(trait_L))
+delta_H <- setNames(runif(n_H, delta_min, delta_max), names(trait_H))
+
+# --- STC interaction rule (Santamaria & Rodriguez-Girones 2007) --------------
+# I_ij = 1  if  |V_i - W_j| < 0.5 * (delta_L_i + delta_H_j)
+web <- matrix(0L, nrow = n_L, ncol = n_H,
+              dimnames = list(names(trait_L), names(trait_H)))
+for (i in seq_len(n_L))
+  for (j in seq_len(n_H))
+    if (abs(trait_L[i] - trait_H[j]) < 0.5 * (delta_L[i] + delta_H[j]))
+      web[i, j] <- 1L
+
+# Patch isolated species: assign to closest trait-match partner
+for (j in which(colSums(web) == 0))
+  web[which.min(abs(trait_L - trait_H[j])), j] <- 1L
+for (i in which(rowSums(web) == 0))
+  web[i, which.min(abs(trait_H - trait_L[i]))] <- 1L
+
+cat(sprintf("Network: %d x %d  |  links = %d  |  connectance = %.3f\n",
+            n_L, n_H, sum(web), sum(web) / (n_L * n_H)))
+
+# --- Sort species by trait value for plotting --------------------------------
+ord_L <- order(trait_L)   # low to high trait for rows
+ord_H <- order(trait_H)   # low to high trait for cols
+web_sorted    <- web[ord_L, ord_H]
+trait_L_sorted <- trait_L[ord_L]
+trait_H_sorted <- trait_H[ord_H]
+
+# --- Trait colour scale (blue = low trait, red = high trait) -----------------
+trait_range   <- range(c(trait_L, trait_H))
+colour_ramp   <- colorRampPalette(c("#2166ac", "#ffffbf", "#d73027"))(100)
+
+trait_to_col <- function(x) {
+  idx <- cut(x, breaks = seq(trait_range[1], trait_range[2],
+                             length.out = 101),
+             labels = FALSE, include.lowest = TRUE)
+  colour_ramp[idx]
+}
+
+cols_L <- trait_to_col(trait_L_sorted)
+cols_H <- trait_to_col(trait_H_sorted)
+
+# --- Layout: 2x2 grid --------------------------------------------------------
+# Cell (1,1) = empty + parameter text
+# Cell (1,2) = H phylogeny (top, horizontal)
+# Cell (2,1) = L phylogeny (left, plotted downwards)
+# Cell (2,2) = interaction matrix
+layout(matrix(c(1, 2, 3, 4), nrow = 2, ncol = 2),
+       widths = c(1.2, 3), heights = c(2, 3))
+
+# --- Panel 1: parameter text -------------------------------------------------
+par(mar = c(0, 0, 0, 0))
+plot.new()
+text(0.05, 0.5,
+     paste0("alpha(L) = ", alpha_L,
+            "\nalpha(H) = ", alpha_H,
+            "\nsigma2 = ", sigma2,
+            "\ndelta [", delta_min, ", ", delta_max, "]",
+            "\nC = ", round(sum(web) / (n_L * n_H), 2)),
+     adj = c(0, 0.5), cex = 1.0, family = "mono")
+
+# --- Panel 2: H phylogeny (horizontal, tips pointing right) ------------------
+par(mar = c(0, 0, 1, 1))
+# Plot the tree with tips ordered to match the sorted trait order
+plot(tree_H, direction = "rightwards",
+     show.tip.label = FALSE, edge.width = 2,
+     x.lim = c(0, max(node.depth.edgelength(tree_H)) * 1.05))
+# Add coloured tip points at their natural tree positions
+# (tree tip y-positions run 1:n_H in ape's default)
+tip_y_H <- seq_len(n_H)
+points(x   = rep(max(node.depth.edgelength(tree_H)), n_H),
+       y   = match(names(trait_H_sorted), tree_H$tip.label),
+       pch = 21, bg = cols_H, col = "black", cex = 1.8)
+
+# --- Panel 3: L phylogeny (plotted downwards, tips at bottom) ----------------
+par(mar = c(1, 1, 0, 0))
+plot(tree_L, direction = "downwards",
+     show.tip.label = FALSE, edge.width = 2,
+     y.lim = c(0, max(node.depth.edgelength(tree_L)) * 1.05))
+points(x   = match(names(trait_L_sorted), tree_L$tip.label),
+       y   = rep(0, n_L),
+       pch = 21, bg = cols_L, col = "black", cex = 1.8)
+
+# --- Panel 4: interaction matrix ---------------------------------------------
+par(mar = c(1, 0, 0, 1))
+image(x    = seq_len(n_L),
+      y    = seq_len(n_H),
+      z    = web_sorted,
+      col  = c("white", "#1a3a5c"),
+      axes = FALSE, xlab = "", ylab = "")
+box()
+
+# --- Reset layout ------------------------------------------------------------
+layout(1)
+par(mar = c(5.1, 4.1, 4.1, 2.1))
+
