@@ -1,6 +1,6 @@
 ################################################################################
 ##                                                                            ##
-##  TASK 5                                                                    ##
+##  TASK 7                                                                    ##
 ##  Joint effect of stabilising selection and trait matching on network       ##
 ##  structure                                                                 ##
 ##                                                                            ##
@@ -8,215 +8,182 @@
 ##  Two parameters jointly determine the structure of an STC network:        ##
 ##                                                                            ##
 ##  1. STABILISING SELECTION (alpha, the OU pull parameter)                  ##
-##     Controls how tightly trait means cluster around the optimum theta.    ##
-##     High alpha -> all species have similar traits -> many pairs overlap   ##
-##     -> dense, non-selective network.                                       ##
-##     Low alpha (BM-like) -> traits spread widely -> only closely matched   ##
-##     species interact -> sparse, modular network.                          ##
+##     Under the OU model at stationarity, trait values are drawn from:      ##
+##       X ~ Normal(theta,  sigma2 / (2 * alpha))                            ##
+##     High alpha -> small variance -> all species have similar traits ->    ##
+##     many trait pairs overlap -> dense, non-selective network.             ##
+##     Low alpha -> large variance -> traits spread widely -> only closely   ##
+##     matched species interact -> sparse, modular network.                  ##
+##     Note: alpha = 0 (pure BM) has no stationary distribution and is      ##
+##     therefore excluded from this task.                                    ##
 ##                                                                            ##
-##  2. TRAIT MATCHING (delta_max, the upper bound of per-species trait range) ##
+##  2. TRAIT MATCHING (delta_max, upper bound of per-species trait range)    ##
 ##     In the STC rule, species i and j interact if:                         ##
-##       |V_i - W_j| < 0.5 * (delta_L_i + delta_H_j)                       ##
-##     A species with a wide delta is a generalist (interacts with many      ##
-##     partners); a species with a narrow delta is a specialist. delta_max   ##
-##     sets the upper limit of this variability -- high delta_max means the  ##
-##     community contains more generalists on average.                       ##
+##       |V_i - W_j|  <  0.5 * (delta_L_i + delta_H_j)                     ##
+##     Each species is assigned a range delta drawn from                     ##
+##       Uniform(delta_min, delta_max)                                       ##
+##     Wide delta -> generalist (interacts with many partners).              ##
+##     Narrow delta -> specialist (interacts only with close trait matches). ##
+##     delta_max sets the ceiling of this variability across the community.  ##
 ##                                                                            ##
-##  This task sweeps both parameters on a 2D grid and displays the chosen    ##
-##  network metric as a heatmap. Each cell is the mean over n_rep replicate  ##
+##  The heatmap shows how the chosen network metric responds to both         ##
+##  parameters simultaneously. Each cell is the mean over n_rep independent  ##
 ##  simulated networks.                                                       ##
 ##                                                                            ##
 ##  AVAILABLE METRICS (set metric_name below)                                ##
-##  Any metric accepted by bipartite::networklevel() as the index argument:  ##
-##    "connectance"          proportion of realised links                     ##
-##    "nestedness"           NODF nestedness (0 = not nested)                ##
-##    "modularity"           Q modularity (high = strong module structure)   ##
-##    "H2"                   network-level specialisation (0 = generalist)   ##
-##    "links per species"    mean degree across both guilds                  ##
-##    "weighted nestedness"  nestedness weighted by interaction frequency    ##
+##  Any metric accepted by bipartite::networklevel(index = ...):             ##
+##    "connectance"        -- proportion of realised links                   ##
+##    "nestedness"         -- NODF nestedness                                ##
+##    "modularity"         -- Q modularity                                   ##
+##    "H2"                 -- network-level specialisation (0 = generalist)  ##
+##    "links per species"  -- mean degree across both guilds                 ##
 ##  Run networklevel(web, index = "ALLBUTDD") on a test web to see all.      ##
 ##                                                                            ##
 ##  QUESTIONS                                                                 ##
 ##  1. Which corner of the heatmap gives the highest value of your metric?   ##
 ##     What ecological scenario does that corner represent?                  ##
 ##  2. Is the effect of alpha stronger when delta_max is low or high?        ##
-##     This interaction tells you whether selection and matching are          ##
-##     redundant or complementary drivers of network structure.              ##
-##  3. Swap metric_name to a different metric and regenerate the heatmap.    ##
+##     This tells you whether selection and matching are redundant or        ##
+##     complementary drivers of network structure.                           ##
+##  3. Change metric_name to a different metric and regenerate the heatmap.  ##
 ##     Do alpha and delta_max have the same relative influence?              ##
-##  4. Set alpha_L != alpha_H (different selection pressure per guild).      ##
-##     Does the heatmap change? Which guild drives the pattern?              ##
+##  4. Set theta_L != theta_H so the two guilds evolve toward different      ##
+##     trait optima. What happens to the network?                            ##
 ##                                                                            ##
 ################################################################################
 
-library(ape)       # phylogeny simulation and manipulation
-library(MASS)      # mvrnorm: multivariate normal draws for trait simulation
-library(bipartite) # networklevel: compute network-level metrics
-library(ggplot2)   # heatmap plot
+library(bipartite)   # networklevel(): compute network-level metrics
+library(ggplot2)     # heatmap plot
 
 
 # =============================================================================
-# PARAMETERS -- read carefully before changing
+# PARAMETERS
 # =============================================================================
 
-set.seed(99)   # fix random seed for reproducibility across the full grid
+set.seed(99)
 
-# --- Metric to compute -------------------------------------------------------
-# Any single string accepted by bipartite::networklevel(index = ...)
-# Change this one line to explore a different property of network structure.
-metric_name <- "connectance"
+# --- Metric ------------------------------------------------------------------
+# The network-level property to measure. Change this one line to explore
+# a different aspect of network structure.
+metric_name <- "links per species"
 
 # --- Community size ----------------------------------------------------------
-n_L <- 20   # number of pollinator species (rows of the interaction matrix)
-n_H <- 20   # number of plant species (cols of the interaction matrix)
-# larger values give more stable metrics but slower simulation
+n_L <- 20   # number of pollinator species (rows of interaction matrix)
+n_H <- 20   # number of plant species (cols of interaction matrix)
 
-# --- Simulation replicates ---------------------------------------------------
-n_rep <- 20   # number of independent networks per grid cell
-# increase to 50+ for publication-quality smoothness
+# --- Replicates --------------------------------------------------------------
+n_rep <- 100   # independent networks simulated per grid cell
+              # increase to 50+ for smoother heatmap cells
 
-# --- OU evolutionary model ---------------------------------------------------
-# alpha_L, alpha_H: OU pull strength for pollinators and plants respectively.
-# These are FIXED here -- the grid sweeps alpha_grid below for both guilds
-# simultaneously. To explore asymmetric selection, replace a in the lapply
-# calls below with separate alpha_L and alpha_H values.
-#
-# sigma2: the BM variance component of the OU model.
-# Controls overall trait variance together with alpha.
-# Higher sigma2 -> more trait spread for a given alpha.
-# Keep this fixed when comparing across alpha values.
-#
-# theta: the OU optimum (trait value that selection pulls towards).
-# Both guilds share the same optimum here. If theta_L != theta_H, the two
-# guilds evolve towards different trait values and the network can become
-# very sparse even at high alpha -- an interesting scenario to explore.
-sigma2 <- 0.8
-theta  <- 0
+# --- OU stationary distribution parameters -----------------------------------
+# sigma2: BM variance component of the OU model.
+# Together with alpha it determines the spread of traits at stationarity:
+#   sd of traits = sqrt(sigma2 / (2 * alpha))
+# Keep sigma2 fixed when comparing across alpha values so that only
+# selection strength varies, not the raw noise level.
+sigma2 <- 1.0
+
+# theta_L, theta_H: OU optima for pollinators and plants respectively.
+# When theta_L == theta_H the two guilds evolve toward the same trait value,
+# maximising the chance of trait overlap and interaction.
+# Setting theta_L != theta_H shifts the guilds apart and can produce very
+# sparse networks even at high alpha -- try e.g. theta_L=0, theta_H=1.
+theta_L <- 0
+theta_H <- 0
 
 # --- Grid axes ---------------------------------------------------------------
 # alpha_grid: values of OU pull strength to sweep (y-axis of heatmap).
-# 0 = pure Brownian Motion (no stabilising selection).
-# Values above ~5 produce near-identical results (traits fully constrained).
-alpha_grid <- c(0, 0.5, 1, 2, 4, 8)
+# Must be strictly positive -- alpha=0 is pure BM which has no stationary
+# distribution and cannot be used with the rnorm approach here.
+# Values above ~8 produce near-identical results (traits fully constrained).
+alpha_grid <- c(0.1, 0.5, 1, 2, 4, 8)
 
 # delta_max_grid: upper bound of per-species trait range (x-axis of heatmap).
 # Each species i gets delta_i ~ Uniform(delta_min, delta_max).
-# delta_min is fixed below; only delta_max is swept.
-# Low delta_max -> community of specialists (narrow trait ranges).
-# High delta_max -> community of generalists (wide trait ranges).
-# This directly controls the "trait matching" axis of the STC rule.
+# Low delta_max  -> community of specialists (narrow ranges, few partners).
+# High delta_max -> community of generalists (wide ranges, many partners).
 delta_max_grid <- c(0.1, 0.3, 0.6, 0.9, 1.2)
 
-# delta_min: lower bound of the per-species trait range distribution.
-# Fixed across all simulations. Keep small (0.05-0.15) so that even the
-# narrowest specialists have a non-zero range.
+# delta_min: lower bound of per-species trait range.
+# Fixed across all simulations. Keep small so every species has some
+# non-zero range and the STC rule can produce at least a few links.
 delta_min <- 0.05
-
-
-# =============================================================================
-# HELPER: OU covariance matrix (Hansen 1997)
-# =============================================================================
-# Computes the n x n phylogenetic variance-covariance matrix for tip traits
-# evolved under the OU model on a given ultrametric tree.
-#
-# Arguments:
-#   tree   -- an ultrametric phylo object (use chronos() to ensure this)
-#   alpha  -- OU pull strength (stabilising selection)
-#   sigma2 -- BM variance component
-#
-# The formula is:
-#   Cov(i,j) = sigma2/(2*alpha) * exp(-alpha*d_ij) * (1 - exp(-2*alpha*t_min))
-# where d_ij is the divergence time between i and j, and t_min is the
-# shallower of their two root-to-tip distances.
-cov_OU <- function(tree, alpha, sigma2) {
-  D <- cophenetic(tree) / 2   # pairwise divergence times
-  n <- Ntip(tree)
-  V <- matrix(0, n, n)
-  for (i in seq_len(n)) {
-    for (j in seq_len(n)) {
-      t_min  <- min(max(D[i, ]) / 2, max(D[j, ]) / 2)
-      V[i,j] <- (sigma2 / (2 * alpha)) *
-        exp(-alpha * D[i, j]) *
-        (1 - exp(-2 * alpha * t_min))
-    }
-  }
-  V + diag(1e-8, n)   # small diagonal jitter for numerical stability
-}
 
 
 # =============================================================================
 # SIMULATION FUNCTION
 # =============================================================================
-# Simulates one STC network and returns a single value of the chosen metric.
+# Simulates one STC network under the OU stationary distribution and returns
+# a single value of the chosen network metric.
+#
+# Trait means are drawn independently from Normal(theta, sigma2 / (2*alpha)).
+# This is the stationary distribution of the OU process -- no phylogeny is
+# needed because we are not modelling phylogenetic covariance between species,
+# only the marginal distribution of traits under stabilising selection.
 #
 # Arguments:
 #   n_L, n_H    -- community sizes
-#   alpha_L     -- OU pull for pollinators (0 = BM)
-#   alpha_H     -- OU pull for plants (0 = BM)
+#   alpha_L     -- OU pull for pollinators (must be > 0)
+#   alpha_H     -- OU pull for plants (must be > 0)
 #   sigma2      -- BM variance component (shared by both guilds)
-#   theta       -- OU optimum (shared by both guilds)
-#   delta_min   -- lower bound of per-species trait range distribution
-#   delta_max   -- upper bound of per-species trait range distribution
-#   metric      -- metric name string passed to bipartite::networklevel()
+#   theta_L     -- OU optimum for pollinators
+#   theta_H     -- OU optimum for plants
+#   delta_min   -- lower bound of per-species trait range
+#   delta_max   -- upper bound of per-species trait range
+#   metric      -- metric name string for bipartite::networklevel()
 #
 # Returns: a single numeric value (NA if bipartite throws an error)
+
 simulate_metric <- function(n_L, n_H,
-                            alpha_L, alpha_H,
-                            sigma2, theta,
-                            delta_min, delta_max,
-                            metric) {
-  
-  # --- Simulate ultrametric phylogenies ------------------------------------
-  tree_L <- chronos(rtree(n_L), quiet = TRUE)
-  tree_H <- chronos(rtree(n_H), quiet = TRUE)
-  
-  # --- Build trait covariance matrices ------------------------------------
-  # If alpha = 0 use pure BM covariance (vcv); otherwise use OU covariance.
-  Sig_L <- if (alpha_L == 0) vcv(tree_L) * sigma2 + diag(1e-8, n_L)
-  else cov_OU(tree_L, alpha_L, sigma2)
-  Sig_H <- if (alpha_H == 0) vcv(tree_H) * sigma2 + diag(1e-8, n_H)
-  else cov_OU(tree_H, alpha_H, sigma2)
-  
-  # --- Draw trait means from multivariate normal ---------------------------
-  # Each tip's trait mean is a draw from the joint distribution implied by
-  # the phylogeny and the evolutionary model.
-  trait_L <- as.vector(mvrnorm(1, rep(theta, n_L), Sig_L))
-  trait_H <- as.vector(mvrnorm(1, rep(theta, n_H), Sig_H))
-  
+                             alpha_L, alpha_H,
+                             sigma2,
+                             theta_L, theta_H,
+                             delta_min, delta_max,
+                             metric) {
+
+  # --- Draw trait means from OU stationary distribution --------------------
+  # Each species independently draws its trait mean from the distribution
+  # that the OU process converges to: Normal(theta, sigma2 / (2*alpha)).
+  # sd = sqrt(sigma2 / (2*alpha)):
+  #   high alpha -> small sd -> traits cluster near theta
+  #   low alpha  -> large sd -> traits spread widely around theta
+  trait_L <- rnorm(n_L, mean = theta_L, sd = sqrt(sigma2 / (2 * alpha_L)))
+  trait_H <- rnorm(n_H, mean = theta_H, sd = sqrt(sigma2 / (2 * alpha_H)))
+
   # --- Draw per-species trait ranges (delta) --------------------------------
-  # Each species independently gets a variability range from Uniform(min, max).
-  # This determines how selective vs. generalised each species is in STC.
+  # Each species independently gets a variability range delta.
+  # This determines how selective vs. generalised each species is in STC:
+  #   narrow delta -> specialist (interacts only with very close matches)
+  #   wide delta   -> generalist (tolerates a wider range of partners)
   delta_L <- runif(n_L, delta_min, delta_max)
   delta_H <- runif(n_H, delta_min, delta_max)
-  
-  # --- Build interaction matrix under STC rule -----------------------------
-  # I_ij = 1  if  |V_i - W_j| < 0.5 * (delta_L_i + delta_H_j)
+
+  # --- Build interaction matrix under the STC rule -------------------------
+  # I_ij = 1  if  |V_i - W_j|  <  0.5 * (delta_L_i + delta_H_j)
   # I_ij = 0  otherwise
   web <- matrix(0L, nrow = n_L, ncol = n_H)
   for (i in seq_len(n_L))
     for (j in seq_len(n_H))
       if (abs(trait_L[i] - trait_H[j]) < 0.5 * (delta_L[i] + delta_H[j]))
         web[i, j] <- 1L
-  
+
   # --- Patch isolated species ----------------------------------------------
-  # Biological constraint: every species must have at least one partner.
-  # We assign the closest trait-match partner rather than a random one,
-  # keeping the result consistent with the STC logic.
+  # Every species must have at least one partner (biological constraint).
+  # We connect isolated species to their closest trait-match partner,
+  # keeping the assignment consistent with the STC logic.
   for (j in which(colSums(web) == 0))
     web[which.min(abs(trait_L - trait_H[j])), j] <- 1L
   for (i in which(rowSums(web) == 0))
     web[i, which.min(abs(trait_H - trait_L[i]))] <- 1L
-  
+
   # --- Compute chosen metric -----------------------------------------------
   # tryCatch prevents a single degenerate network from crashing the loop.
-  # Some metrics (e.g. modularity) can fail on very sparse or very dense webs.
   val <- tryCatch(
     networklevel(web, index = metric),
     error   = function(e) NA_real_,
     warning = function(w) suppressWarnings(networklevel(web, index = metric))
   )
-  
-  # networklevel() returns a named vector; take the first element
+
   as.numeric(val[1])
 }
 
@@ -224,25 +191,28 @@ simulate_metric <- function(n_L, n_H,
 # =============================================================================
 # RUN THE 2D GRID
 # =============================================================================
-cat("Running", length(alpha_grid) * length(delta_max_grid) * n_rep,
-    "total simulations...\n")
+
+cat(sprintf("Running %d total simulations (%d alpha x %d delta_max x %d reps)...\n",
+            length(alpha_grid) * length(delta_max_grid) * n_rep,
+            length(alpha_grid), length(delta_max_grid), n_rep))
 
 grid_results <- do.call(rbind, lapply(alpha_grid, function(a) {
   do.call(rbind, lapply(delta_max_grid, function(dmax) {
-    
+
     vals <- replicate(n_rep,
                       simulate_metric(
                         n_L       = n_L,
                         n_H       = n_H,
-                        alpha_L   = a,      # same alpha for both guilds
-                        alpha_H   = a,      # change to explore asymmetry
+                        alpha_L   = a,
+                        alpha_H   = a,
                         sigma2    = sigma2,
-                        theta     = theta,
+                        theta_L   = theta_L,
+                        theta_H   = theta_H,
                         delta_min = delta_min,
                         delta_max = dmax,
                         metric    = metric_name
                       ))
-    
+
     data.frame(
       alpha     = a,
       delta_max = dmax,
@@ -259,12 +229,9 @@ cat("Done.\n")
 # HEATMAP
 # =============================================================================
 
-# Label alpha = 0 explicitly as BM for clarity
 grid_results$alpha_label <- factor(
-  ifelse(grid_results$alpha == 0,
-         "0 (BM)",
-         as.character(grid_results$alpha)),
-  levels = ifelse(alpha_grid == 0, "0 (BM)", as.character(alpha_grid))
+  as.character(grid_results$alpha),
+  levels = as.character(alpha_grid)
 )
 
 grid_results$delta_label <- factor(
@@ -279,20 +246,22 @@ print(
     geom_text(aes(label = round(mean_val, 2)),
               size = 4, colour = "white", fontface = "bold") +
     scale_fill_gradient2(
-      low      = "#2166ac",   # low metric value -> blue
-      mid      = "#ffffbf",   # mid -> yellow
-      high     = "#d73027",   # high metric value -> red
+      low      = "#2166ac",
+      mid      = "#ffffbf",
+      high     = "#d73027",
       midpoint = median(grid_results$mean_val, na.rm = TRUE),
       name     = metric_name
     ) +
     labs(
-      title    = paste0("Task 5 -- Effect of stabilising selection and trait ",
-                        "matching on ", metric_name),
+      title    = paste0("Task 5 -- Joint effect of stabilising selection and ",
+                        "trait matching on ", metric_name),
       subtitle = paste0(n_rep, " replicates per cell  |  ",
                         n_L, " x ", n_H, " network  |  ",
-                        "sigma2 = ", sigma2, "  |  theta = ", theta),
-      x = "Trait range upper bound  delta_max  (trait matching: low = specialist)",
-      y = "OU pull strength  alpha  (stabilising selection: 0 = BM)"
+                        "sigma2 = ", sigma2,
+                        "  |  theta(L) = ", theta_L,
+                        "  |  theta(H) = ", theta_H),
+      x = "Trait range upper bound  delta_max  (low = specialist community)",
+      y = "OU pull strength  alpha  (high = strong stabilising selection)"
     ) +
     theme_bw(base_size = 13) +
     theme(
@@ -302,4 +271,3 @@ print(
       legend.position  = "right"
     )
 )
-
