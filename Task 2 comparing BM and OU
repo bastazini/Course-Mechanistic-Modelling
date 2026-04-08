@@ -24,8 +24,6 @@
 ##  1. What is the stationary variance of the OU process? (sigma2 / 2*alpha) ##
 ##     Verify by computing var() of the last 50 steps for each blue line.    ##
 ##  2. Set alpha very large (e.g. 0.9). What does the trajectory look like?  ##
-##  3. Which model do you expect to produce more modular pollination          ##
-##     networks, and why?                                                     ##
 ##                                                                            ##
 ################################################################################
 
