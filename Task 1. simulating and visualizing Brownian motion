@@ -1,0 +1,45 @@
+# --- 1. SETUP PARAMETERS ---
+set.seed(12)
+n_steps <- 100               # Number of time steps (generations/millions of years)
+n_scenarios <- 10            # Number of drift levels to compare
+
+# Define a sequence of drift intensities (sigma values)
+# Low values = slow evolution (stasis); High values = rapid divergence (drift)
+drift_intensities <- seq(0.01, 0.5, length.out = n_scenarios)
+
+# Initialize a matrix 'B' to store the trait values over time
+# Rows = Time, Columns = Different Drift Scenarios
+B <- matrix(0, nrow = n_steps, ncol = n_scenarios)
+
+# --- 2. SIMULATE BROWNIAN MOTION ---
+# For each drift level, we calculate a cumulative sum of random changes
+for (i in 1:n_scenarios) {
+  # Each step is a random draw from a normal distribution 
+  # The standard deviation is defined by our drift intensity
+  daily_changes <- rnorm(n_steps, mean = 0, sd = drift_intensities[i])
+  
+  # The trait value at any time is the sum of all changes up to that point
+  B[, i] <- cumsum(daily_changes)
+}
+
+# --- 3. VISUALIZATION ---
+# Define colors using the "Temps" palette as requested
+cols <- hcl.colors(n_scenarios, "Temps")
+
+# Plot the matrix B
+# Each line represents a different level of drift
+matplot(B, 
+        type = "l",           # Use lines
+        col = cols,           # Apply the temperature colors
+        lwd = 2,              # Line width
+        lty = 1,              # Solid line type
+        xlab = "Time Steps", 
+        ylab = "Trait Value",
+        main = "Visualization of Brownian Motion Drift Levels")
+
+# Add a legend to help interpret the drift intensities
+legend("topleft", legend = round(drift_intensities, 2), 
+       col = cols, lty = 1, lwd = 2, title = "Drift Rate (sigma)", cex = 0.8)
+
+# Finishing message
+cat("Task 1 finished: Trait drift trajectories simulated. Observe how lines with higher drift (warmer colors) explore a much wider range of trait values over the same amount of time compared to low-drift lines.")
