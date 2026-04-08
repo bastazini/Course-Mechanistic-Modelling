@@ -1,0 +1,44 @@
+# Load libraries
+library(ape)
+library(geiger)
+library(bipartite)
+
+# --- 1. DEFINE THE SIMULATION FUNCTION ---
+generate_trait_network <- function(n_L, n_H, a_L, a_H, p_match) {
+  
+  # A. Simulate Trees
+  tree_L <- sim.bdtree(b = 0.1, d = 0, stop = "taxa", n = n_L)
+  tree_H <- sim.bdtree(b = 0.1, d = 0, stop = "taxa", n = n_H)
+  tree_L$tip.label <- sprintf("L_%.3d", 1:n_L)
+  tree_H$tip.label <- sprintf("H_%.3d", 1:n_H)
+  
+  # B. Evolve Traits (OU model)
+  # We take the absolute value to ensure positive values as requested
+  t_L_raw <- abs(rTraitCont(tree_L, model = "OU", alpha = a_L))
+  t_H_raw <- abs(rTraitCont(tree_H, model = "OU", alpha = a_H))
+  
+  # C. Normalize traits (0 to 1) inline
+  trait_L <- (t_L_raw - min(t_L_raw)) / (max(t_L_raw) - min(t_L_raw))
+  trait_H <- (t_H_raw - min(t_H_raw)) / (max(t_H_raw) - min(t_H_raw))
+  
+  # D. Create Interaction Matrix (Trait Matching Rule)
+  # Interaction occurs if |trait_L - trait_H| < random threshold (up to p_match)
+  d_matrix <- matrix(runif(n_L * n_H, min = 0, max = p_match), nrow = n_L, ncol = n_H)
+  web <- outer(trait_L, trait_H, FUN = function(x, y) abs(x - y) < d_matrix)
+  web <- ifelse(web, 1, 0)
+  dimnames(web) <- list(names(trait_L), names(trait_H))
+  
+  # E. Ensure no empty rows or columns (Biological Realism)
+  empty_H <- which(colSums(web) == 0)
+  if (length(empty_H) > 0) {
+    for (h in empty_H) web[sample(1:n_L, 1), h] <- 1
+  }
+  empty_L <- which(rowSums(web) == 0)
+  if (length(empty_L) > 0) {
+    for (l in empty_L) web[l, sample(1:n_H, 1)] <- 1
+  }
+  
+  return(web)
+}
+
+cat("Task 1 finished: Simulation function 'generate_trait_network' is now defined and ready for use.")
