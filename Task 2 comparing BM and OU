@@ -1,63 +1,85 @@
-# --- 1. SETUP PARAMETERS ---
+################################################################################
+##                                                                            ##
+##  TASK 2                                                                    ##
+##  Brownian Motion vs Ornstein-Uhlenbeck -- comparing evolutionary models   ##
+##                                                                            ##
+##  BACKGROUND                                                                ##
+##  BM: trait increments are i.i.d. N(0, sigma2). Variance grows without     ##
+##  bound as sigma2 * t. The trajectory is a random walk with no attractor.  ##
+##                                                                            ##
+##  OU: a deterministic pull towards optimum theta is added:                 ##
+##    X(t) = X(t-1) + alpha*(theta - X(t-1)) + N(0, sigma2)                 ##
+##  alpha controls the strength of stabilising selection. Large alpha ->      ##
+##  strong pull, trait stays near theta. alpha = 0 recovers BM.             ##
+##                                                                            ##
+##  We simulate 5 BM trajectories with increasing sigma2 (red palette) and   ##
+##  5 OU trajectories with increasing alpha at fixed sigma2 (blue palette).  ##
+##                                                                            ##
+##  WHAT YOU SHOULD SEE                                                       ##
+##  Red lines (BM) diverge indefinitely. Darker red = faster divergence.     ##
+##  Blue lines (OU) are pulled back to the dashed optimum. Darker blue =     ##
+##  stronger pull = tighter oscillation around theta.                        ##
+##                                                                            ##
+##  QUESTIONS                                                                 ##
+##  1. What is the stationary variance of the OU process? (sigma2 / 2*alpha) ##
+##     Verify by computing var() of the last 50 steps for each blue line.    ##
+##  2. Set alpha very large (e.g. 0.9). What does the trajectory look like?  ##
+##  3. Which model do you expect to produce more modular pollination          ##
+##     networks, and why?                                                     ##
+##                                                                            ##
+################################################################################
+
 set.seed(12)
-n_steps <- 200               # Number of time steps
-n_lines <- 5                 # Number of lines per model (5 Red, 5 Blue)
-theta <- 0                   # The evolutionary optimum for OU
 
-# Define specific gradients for the models
-# BM: Increasing drift (sigma)
-sigmas <- seq(0.02, 0.15, length.out = n_lines)
-# OU: Increasing selection (alpha) with a fixed drift
-alphas <- seq(0.05, 0.3, length.out = n_lines)
-sigma_ou <- 0.1
+n_steps <- 20
+n_traj  <- 200       # trajectories per model
+theta   <- 0        # OU optimum
 
-# Create a matrix to hold all 10 trajectories
-# Columns 1-5: BM (Drift) | Columns 6-10: OU (Selection)
-B <- matrix(0, nrow = n_steps, ncol = n_lines * 2)
+# BM: vary sigma2 (variance per step)
+sigma2_bm <- seq(0.02, 0.15, length.out = n_traj)
 
-# --- 2. SIMULATE TRAJECTORIES ---
-for (i in 1:n_lines) {
-  # --- Simulate Brownian Motion (Red lines) ---
-  # Cumulative sum of random errors with increasing sigma
-  B[, i] <- cumsum(rnorm(n_steps, mean = 0, sd = sigmas[i]))
+# OU: vary alpha (selection strength) at fixed sigma2
+alpha_ou  <- seq(0.05, 0.3, length.out = n_traj)
+sigma2_ou <- 0.1
+
+# Columns 1:n_traj = BM, columns (n_traj+1):(2*n_traj) = OU
+traj <- matrix(0, nrow = n_steps, ncol = n_traj * 2)
+
+for (i in seq_len(n_traj)) {
   
-  # --- Simulate OU Model (Blue lines) ---
-  val_ou <- 0
+  # BM: cumulative sum of N(0, sigma2) increments
+  traj[, i] <- cumsum(rnorm(n_steps, mean = 0, sd = sqrt(sigma2_bm[i])))
+  
+  # OU: Euler-Maruyama, reset starting value for each trajectory
+  x <- 0
+  traj[1, i + n_traj] <- x
   for (t in 2:n_steps) {
-    # The 'pull' toward the optimum (theta)
-    pull <- alphas[i] * (theta - val_ou)
-    # The random drift component
-    error <- rnorm(1, mean = 0, sd = sigma_ou)
-    
-    val_ou <- val_ou + pull + error
-    B[t, i + n_lines] <- val_ou
+    x <- x + alpha_ou[i] * (theta - x) + rnorm(1, mean = 0, sd = sqrt(sigma2_ou))
+    traj[t, i + n_traj] <- x
   }
 }
 
-# --- 3. VISUALIZATION ---
-# Define colors: Reds for BM, Blues for OU
-cols_bm <- hcl.colors(n_lines, "Reds", rev = TRUE)
-cols_ou <- hcl.colors(n_lines, "Blues", rev = TRUE)
-all_cols <- c(cols_bm, cols_ou)
+cols_bm <- colorRampPalette(c("#fcbba1", "#a50f15"))(n_traj)  # light to dark red
+cols_ou <- colorRampPalette(c("#c6dbef", "#08306b"))(n_traj)  # light to dark blue
 
-# Plot everything in one matplot
-matplot(B, 
-        type = "l", 
-        col = all_cols, 
-        lwd = 2, 
-        lty = 1,
-        xlab = "Time Steps", 
-        ylab = "Trait Value",
-        main = "Evolutionary Dynamics: Drift (Red) vs. Selection (Blue)")
+matplot(traj,
+        type = "l",
+        col  = c(cols_bm, cols_ou),
+        lwd  = 2,
+        lty  = 1,
+        xlab = "Time (generations)",
+        ylab = "Trait value",
+        main = "Task 2 -- BM (red) vs OU (blue): trait trajectories")
 
-# Add a reference line for the optimum (Selection Target)
 abline(h = theta, lty = 2, col = "black", lwd = 1)
+text(x = n_steps * 0.98, y = theta + 0.05,
+     labels = paste0("optimum theta = ", theta),
+     adj = 1, cex = 0.8, col = "grey30")
 
-# Add a legend
-legend("topleft", 
-       legend = c("BM: Low Drift", "BM: High Drift", "OU: Low Selection", "OU: High Selection"),
-       col = c(cols_bm[1], cols_bm[n_lines], cols_ou[1], cols_ou[n_lines]), 
-       lty = 1, lwd = 3, bty = "n", cex = 0.8)
+legend("topleft",
+       legend = c(paste0("BM  sigma2 = ", round(sigma2_bm, 3)),
+                  paste0("OU  alpha = ",  round(alpha_ou,  2))),
+       col    = c(cols_bm, cols_ou),
+       lty    = 1, lwd = 2, bty = "n", cex = 0.75,
+       title  = "Model and parameter")
 
-# Finishing message
-cat("Task 1 finished: Comparison plot generated. Observe how the Red lines (BM) diverge over time, while the Blue lines (OU) are 'caged' around the dashed line (the optimum).")
