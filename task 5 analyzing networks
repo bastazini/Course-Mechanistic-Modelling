@@ -1,0 +1,84 @@
+# ===================================================================
+# --- 1. LOAD REQUIRED PACKAGES ---
+# ===================================================================
+if (!require("geiger")) install.packages("geiger")
+if (!require("ape")) install.packages("ape")
+if (!require("phytools")) install.packages("phytools")
+
+library(geiger)
+library(ape)
+library(phytools)
+
+# --- 2. HELPER FUNCTION ---
+rescale_vector <- function(x, new_range = c(0, 1)) {
+  if (length(unique(x)) == 1) return(rep(mean(new_range), length(x)))
+  old_min <- min(x, na.rm = TRUE)
+  old_max <- max(x, na.rm = TRUE)
+  return(new_range[1] + (x - old_min) * (new_range[2] - new_range[1]) / (old_max - old_min))
+}
+
+# ===================================================================
+# --- 3. THE ANALYZE_NETWORK FUNCTION ---
+# ===================================================================
+# This function simulates, plots, and returns basic metrics
+analyze_network <- function(n_spe_L=20, n_spe_H=20, alpha_L=5, alpha_H=0.5, p_match=0.3) {
+  
+  # A. Simulate Trees
+  tree_L <- sim.bdtree(b = 0.1, d = 0, stop = "taxa", n = n_spe_L)
+  tree_H <- sim.bdtree(b = 0.1, d = 0, stop = "taxa", n = n_spe_H)
+  tree_L$tip.label <- sprintf("L_%.3d", 1:n_spe_L)
+  tree_H$tip.label <- sprintf("H_%.3d", 1:n_spe_H)
+
+  # B. Evolve Traits (OU Model)
+  trait_L_raw <- rTraitCont(tree_L, model = "OU", alpha = alpha_L)
+  trait_H_raw <- rTraitCont(tree_H, model = "OU", alpha = alpha_H)
+  trait_L <- rescale_vector(trait_L_raw)
+  trait_H <- rescale_vector(trait_H_raw)
+
+  # C. Matching Rule
+  d_matrix <- matrix(runif(n_spe_L * n_spe_H, min = 0, max = p_match), nrow = n_spe_L, ncol = n_spe_H)
+  web <- outer(trait_L, trait_H, FUN = function(x, y) abs(x - y) < d_matrix)
+  web <- ifelse(web, 1, 0)
+  
+  # Ensure no empty rows/cols
+  for (i in 1:nrow(web)) if(sum(web[i,])==0) web[i, sample(1:ncol(web),1)] <- 1
+  for (j in 1:ncol(web)) if(sum(web[,j])==0) web[sample(1:nrow(web),1), j] <- 1
+
+  # D. Prepare Alignment for Plotting
+  tree_L_reordered <- reorder(tree_L, "postorder")
+  tip_order_L <- tree_L_reordered$tip.label[tree_L_reordered$edge[tree_L_reordered$edge[, 2] <= n_spe_L, 2]]
+  tree_H_reordered <- reorder(tree_H, "postorder")
+  tip_order_H <- tree_H_reordered$tip.label[tree_H_reordered$edge[tree_H_reordered$edge[, 2] <= n_spe_H, 2]]
+  
+  web_reordered <- web[tip_order_L, tip_order_H]
+  
+  # E. Metrics Calculation
+  connectance <- sum(web) / (n_spe_L * n_spe_H)
+  degree_L <- rowSums(web) # Interactions per Lower species
+  degree_H <- colSums(web) # Interactions per Higher species
+
+  # F. Plotting Logic
+  layout_matrix <- matrix(c(0, 1, 2, 3), nrow=2, ncol=2)
+  layout(layout_matrix, widths=c(1, 3), heights=c(1, 3))
+  
+  # Top Phylogeny
+  par(mar = c(0, 0, 1, 1))
+  plot(tree_H_reordered, direction = "rightwards", show.tip.label = FALSE)
+  
+  # Left Phylogeny + Info
+  par(mar = c(1, 1, 0, 0))
+  plot(tree_L_reordered, direction = "downwards", show.tip.label = FALSE)
+  text(x = 1, y = max(node.depth.edgelength(tree_L_reordered)) * 0.8,
+       labels = paste0("Conn: ", round(connectance, 3), 
+                       "\nAvg Deg: ", round(mean(degree_L), 1)), pos=4, cex=0.9)
+
+  # Matrix
+  par(mar = c(1, 0, 0, 1))
+  image(x = 1:n_spe_L, y = 1:n_spe_H, z = web_reordered, col = c("white", "black"), axes = FALSE)
+  box()
+  
+  # Return Metrics
+  return(list(connectance=connectance, degree_L=degree_L, degree_H=degree_H))
+}
+
+cat("Task 1 finished: Integrated simulation and metric function defined.")
