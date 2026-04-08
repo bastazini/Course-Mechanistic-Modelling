@@ -1,0 +1,63 @@
+# --- 1. SETUP PARAMETERS ---
+set.seed(12)
+n_steps <- 200               # Number of time steps
+n_lines <- 5                 # Number of lines per model (5 Red, 5 Blue)
+theta <- 0                   # The evolutionary optimum for OU
+
+# Define specific gradients for the models
+# BM: Increasing drift (sigma)
+sigmas <- seq(0.02, 0.15, length.out = n_lines)
+# OU: Increasing selection (alpha) with a fixed drift
+alphas <- seq(0.05, 0.3, length.out = n_lines)
+sigma_ou <- 0.1
+
+# Create a matrix to hold all 10 trajectories
+# Columns 1-5: BM (Drift) | Columns 6-10: OU (Selection)
+B <- matrix(0, nrow = n_steps, ncol = n_lines * 2)
+
+# --- 2. SIMULATE TRAJECTORIES ---
+for (i in 1:n_lines) {
+  # --- Simulate Brownian Motion (Red lines) ---
+  # Cumulative sum of random errors with increasing sigma
+  B[, i] <- cumsum(rnorm(n_steps, mean = 0, sd = sigmas[i]))
+  
+  # --- Simulate OU Model (Blue lines) ---
+  val_ou <- 0
+  for (t in 2:n_steps) {
+    # The 'pull' toward the optimum (theta)
+    pull <- alphas[i] * (theta - val_ou)
+    # The random drift component
+    error <- rnorm(1, mean = 0, sd = sigma_ou)
+    
+    val_ou <- val_ou + pull + error
+    B[t, i + n_lines] <- val_ou
+  }
+}
+
+# --- 3. VISUALIZATION ---
+# Define colors: Reds for BM, Blues for OU
+cols_bm <- hcl.colors(n_lines, "Reds", rev = TRUE)
+cols_ou <- hcl.colors(n_lines, "Blues", rev = TRUE)
+all_cols <- c(cols_bm, cols_ou)
+
+# Plot everything in one matplot
+matplot(B, 
+        type = "l", 
+        col = all_cols, 
+        lwd = 2, 
+        lty = 1,
+        xlab = "Time Steps", 
+        ylab = "Trait Value",
+        main = "Evolutionary Dynamics: Drift (Red) vs. Selection (Blue)")
+
+# Add a reference line for the optimum (Selection Target)
+abline(h = theta, lty = 2, col = "black", lwd = 1)
+
+# Add a legend
+legend("topleft", 
+       legend = c("BM: Low Drift", "BM: High Drift", "OU: Low Selection", "OU: High Selection"),
+       col = c(cols_bm[1], cols_bm[n_lines], cols_ou[1], cols_ou[n_lines]), 
+       lty = 1, lwd = 3, bty = "n", cex = 0.8)
+
+# Finishing message
+cat("Task 1 finished: Comparison plot generated. Observe how the Red lines (BM) diverge over time, while the Blue lines (OU) are 'caged' around the dashed line (the optimum).")
