@@ -23,8 +23,7 @@
 ##  1. The variance of a BM trajectory at time t is sigma2 * t. Verify this  ##
 ##     by computing var(traj[t, ]) across drift levels at t = 50 and t = 100.##
 ##  2. How would you modify the code to simulate OU evolution instead?        ##
-##  3. Which sigma2 value would you consider realistic for floral tube        ##
-##     length (mm) evolving over 1 million years? Justify your answer.       ##
+##                                                                            ##
 ##                                                                            ##
 ################################################################################
 
