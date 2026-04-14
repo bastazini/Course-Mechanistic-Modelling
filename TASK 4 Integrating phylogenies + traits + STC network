@@ -1,28 +1,5 @@
 ################################################################################
 ##                                                                            ##
-##  TASK 4                                                                   ##
-##  Integrated visualisation: phylogenies + traits + STC network             ##
-##                                                                            ##
-##  BACKGROUND                                                                ##
-##  This task brings together all components of the model in one figure:     ##
-##    Top-right  -- interaction matrix (rows = L, cols = H, sorted by trait) ##
-##    Top-left   -- empty (parameter label)                                  ##
-##    Bottom-right -- H phylogeny with trait colours at tips                 ##
-##    Bottom-left  -- L phylogeny with trait colours at tips                 ##
-##                                                                            ##
-##  Species are sorted by evolved trait value on both axes. This reveals     ##
-##  the diagonal band produced by the STC rule: species interact when their  ##
-##  trait intervals overlap, so interactions concentrate near the diagonal   ##
-##  when species are sorted by trait mean.                                   ##
-##                                                                            ##
-##  PARAMETERS TO EXPLORE                                                    ##
-##  alpha_L, alpha_H  -- OU pull for each guild (try 0 vs 5)                ##
-##  delta_min/max     -- range of species variability (try narrow vs wide)   ##
-##  sigma2            -- BM variance component                               ##
-################################################################################
-
-################################################################################
-##                                                                            ##
 ##  TASK 4                                                                    ##
 ##  Integrating phylogenies + traits + Single Trait complementary models      ##
 ##                                                                            ##
