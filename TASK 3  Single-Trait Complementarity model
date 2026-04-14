@@ -1,6 +1,6 @@
 ################################################################################
 ##                                                                            ##
-##                                                                            ##
+##  TASK 3                                                                    ##
 ##  The Single-Trait Complementarity model -- baseline network, interaction   ##
 ## matrix and bipartite graph                                                 ##
 ##                                                                            ##
@@ -14,35 +14,62 @@
 ##  Here dV = dW = d_range for all species (symmetric, fixed range).         ##
 ################################################################################
 
-#rm(list = ls())
 
-#packages
+# -------------------------------
+# 0. (Optional) Clean workspace
+# -------------------------------
+ rm(list = ls())
+
+
+# -------------------------------
+# 1. Load required packages
+# -------------------------------
 require(bipartite)
 
+
+# -------------------------------
+# 2. Set random seed (reproducibility)
+# -------------------------------
 set.seed(12)
 
-# Number of species
+
+# -------------------------------
+# 3. Define number of species
+# -------------------------------
+
 n_resource <- 20
 n_consumer <- 20
 
 
-# Generate traits
+# -------------------------------
+# 4. Generate trait values
+# -------------------------------
 
-# Mean trait values (uniformly distributed)
+# Mean trait values (uniform distribution)
 V <- runif(n_resource, min = 0, max = 10)  # resources
 W <- runif(n_consumer, min = 0, max = 10)  # consumers
 
-# Trait variability (niche width)
+
+# -------------------------------
+# 5. Generate trait variability
+# -------------------------------
+
+# Niche width (trait range)
 delta_V <- runif(n_resource, min = 0.05, max = 1)
 delta_W <- runif(n_consumer, min = 0.05, max = 1)
 
-# Build interaction matrix
 
+# -------------------------------
+# 6. Initialize interaction matrix
+# -------------------------------
 
-# Initialize matrix
 web <- matrix(0, nrow = n_resource, ncol = n_consumer)
 
-# Fill matrix using complementarity rule
+
+# -------------------------------
+# 7. Apply complementarity rule
+# -------------------------------
+
 for (i in 1:n_resource) {
   for (j in 1:n_consumer) {
     
@@ -56,11 +83,19 @@ for (i in 1:n_resource) {
 }
 
 
-#Visualize network
-#As a adjacency matrix
-image(web, main = "Bipartite Interaction Matrix",
-      xlab = "Consumers", ylab = "Resources",
+# -------------------------------
+# 8. Visualize as adjacency matrix
+# -------------------------------
+
+image(web,
+      main = "Bipartite Interaction Matrix",
+      xlab = "Consumers",
+      ylab = "Resources",
       col = c("white", "black"))
 
-#As a graph
+
+# -------------------------------
+# 9. Visualize as bipartite graph
+# -------------------------------
+
 plotweb(web, method = "normal", text.rot = 90)
