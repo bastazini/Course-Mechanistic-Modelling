@@ -1,49 +1,47 @@
 ################################################################################
 ##                                                                            ##
-##                                                                      ##
-##  Brownian Motion trait evolution -- effect of the rate parameter sigma2   ##
+##                                                                            ##
+##  Brownian Motion trait evolution -- effect of the rate parameter sigma2    ##
 ##                                                                            ##
 ##  BACKGROUND                                                                ##
-##  The Brownian Motion (BM) model assumes trait change along a lineage is   ##
-##  a sequence of random normal increments with mean 0 and variance          ##
-##  sigma2 * dt per time step. The parameter sigma2 controls how fast traits ##
-##  diverge: large sigma2 -> wide spread; small sigma2 -> tight clustering.  ##
+##  The Brownian Motion (BM) model assumes trait change along a lineage is    ##
+##  a sequence of random normal increments with mean 0 and variance           ##
+##  sigma2 * dt per time step. The parameter sigma2 controls how fast traits  ##
+##  diverge: large sigma2 -> wide spread; small sigma2 -> tight clustering.   ##
 ##                                                                            ##
-##  Here we simulate a single BM lineage for each of n_drift_levels values   ##
-##  of sigma2 and plot all trajectories on the same axes. Each trajectory    ##
-##  is the cumulative sum of independent N(0, sigma2) increments.            ##
-##                                                                            ##
-##  WHAT YOU SHOULD SEE                                                       ##
-##  Low sigma2 (cool colours) -> tight, slow-wandering trajectories.         ##
-##  High sigma2 (warm colours) -> wide, fast-diverging trajectories.         ##
-##  All trajectories start at 0 and have mean 0, but their variance at       ##
-##  time t grows as sigma2 * t.                                               ##
-##                                                                            ##
-##  QUESTIONS                                                                 ##
-##  1. The variance of a BM trajectory at time t is sigma2 * t. Verify this  ##
-##     by computing var(traj[t, ]) across drift levels at t = 50 and t = 100.##
-##  2. How would you modify the code to simulate OU evolution instead?        ##
+##  Here we simulate a single BM lineage for each of n_drift_levels values    ##
+##  of sigma2 and plot all trajectories on the same axes. Each trajectory     ##
+##  is the cumulative sum of independent N(0, sigma2) increments.             ##
 ##                                                                            ##
 ##                                                                            ##
 ################################################################################
 
+#rm(list=ls()) #Clean workspace
+
+# fixing R's random number generator to a specific starting point.
 set.seed(12)
 
-n_steps       <- 100
-n_drift_levels <- 10
+#define the number of steps for each randomwalk
+n_steps   <- 100 
+#define number of BM trajectories
+n_drift_levels <- 10 
 
 # sigma2 values to compare (variance per time step, not standard deviation)
 sigma2_values <- seq(0.01, 0.5, length.out = n_drift_levels)
 
 # Each column of traj is one BM trajectory under a different sigma2
-traj <- matrix(0, nrow = n_steps, ncol = n_drift_levels)
+
+traj <- matrix(0, nrow = n_steps, ncol = n_drift_levels) # Pre-allocate matrix: rows = time steps, columns = one trajectory per sigma2 value
 for (i in seq_len(n_drift_levels)) {
-  increments  <- rnorm(n_steps, mean = 0, sd = sqrt(sigma2_values[i]))
+# Draw random increments from N(0, sigma2) — the BM step distribution  
+increments  <- rnorm(n_steps, mean = 0, sd = sqrt(sigma2_values[i]))
   traj[, i]   <- cumsum(increments)
 }
 
+# Generate one distinct colour per drift level for plotting
 cols <- hcl.colors(n_drift_levels, "Temps")
 
+#plot
 matplot(traj,
         type = "l",
         col  = cols,
@@ -53,7 +51,7 @@ matplot(traj,
         ylab = "Trait value",
         main = "Task 1 -- Brownian Motion trajectories across sigma2 values")
 
-legend("topleft",
+legend("bottomleft",
        legend = round(sigma2_values, 3),
        col    = cols,
        lty    = 1,
