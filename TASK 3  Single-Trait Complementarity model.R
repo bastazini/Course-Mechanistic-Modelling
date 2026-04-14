@@ -98,5 +98,5 @@ image(web,
 # 9. Visualize as bipartite graph
 # -------------------------------
 
-plotweb(web, method = "normal", text.rot = 90)
+plotweb(web)
 
