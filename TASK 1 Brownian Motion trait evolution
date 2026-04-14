@@ -13,35 +13,73 @@
 ##  of sigma2 and plot all trajectories on the same axes. Each trajectory     ##
 ##  is the cumulative sum of independent N(0, sigma2) increments.             ##
 ##                                                                            ##
-##                                                                            ##
 ################################################################################
 
-#rm(list=ls()) #Clean workspace
 
-# fixing R's random number generator to a specific starting point.
+# -------------------------------
+# 0. (Optional) Clean workspace
+# -------------------------------
+rm(list = ls())
+
+
+# -------------------------------
+# 1. Set random seed (reproducibility)
+# -------------------------------
 set.seed(12)
 
-#define the number of steps for each randomwalk
-n_steps   <- 100 
-#define number of BM trajectories
+
+# -------------------------------
+# 2. Define simulation parameters
+# -------------------------------
+
+# Number of time steps in each trajectory
+n_steps <- 100 
+
+# Number of Brownian motion trajectories
 n_drift_levels <- 10 
 
-# sigma2 values to compare (variance per time step, not standard deviation)
+
+# -------------------------------
+# 3. Define sigma2 values
+# -------------------------------
+
+# Variance per time step (not standard deviation)
 sigma2_values <- seq(0.01, 0.5, length.out = n_drift_levels)
 
-# Each column of traj is one BM trajectory under a different sigma2
 
-traj <- matrix(0, nrow = n_steps, ncol = n_drift_levels) # Pre-allocate matrix: rows = time steps, columns = one trajectory per sigma2 value
+# -------------------------------
+# 4. Initialize storage matrix
+# -------------------------------
+
+# Rows = time steps, Columns = trajectories (one per sigma2)
+traj <- matrix(0, nrow = n_steps, ncol = n_drift_levels)
+
+
+# -------------------------------
+# 5. Simulate Brownian motion
+# -------------------------------
+
 for (i in seq_len(n_drift_levels)) {
-# Draw random increments from N(0, sigma2) — the BM step distribution  
-increments  <- rnorm(n_steps, mean = 0, sd = sqrt(sigma2_values[i]))
-  traj[, i]   <- cumsum(increments)
+  
+  # Draw increments from N(0, sigma2)
+  increments <- rnorm(n_steps, mean = 0, sd = sqrt(sigma2_values[i]))
+  
+  # Cumulative sum = Brownian trajectory
+  traj[, i] <- cumsum(increments)
 }
 
-# Generate one distinct colour per drift level for plotting
+
+# -------------------------------
+# 6. Generate colors for plotting
+# -------------------------------
+
 cols <- hcl.colors(n_drift_levels, "Temps")
 
-#plot
+
+# -------------------------------
+# 7. Plot trajectories
+# -------------------------------
+
 matplot(traj,
         type = "l",
         col  = cols,
@@ -50,6 +88,11 @@ matplot(traj,
         xlab = "Time (generations)",
         ylab = "Trait value",
         main = "Task 1 -- Brownian Motion trajectories across sigma2 values")
+
+
+# -------------------------------
+# 8. Add legend
+# -------------------------------
 
 legend("bottomleft",
        legend = round(sigma2_values, 3),
