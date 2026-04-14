@@ -2,156 +2,65 @@
 ##                                                                            ##
 ##                                                                            ##
 ##  The Single-Trait Complementarity model -- baseline network, interaction   ##
-matrix and bipartite graph                                                    ##
+## matrix and bipartite graph                                                 ##
 ##                                                                            ##
 ##  BACKGROUND                                                                ##
 ##  The Single-Trait Complementarity model (Santamaria & Rodriguez-Girones   ##
 ##  2007) defines interaction between pollinator i and plant j as:           ##
-##                                                                            ##
-##    interact  <=>  |V_i - W_j|  <=  (dV_i + dW_j) / 2                    ##
-##                                                                            ##
-##  where V_i and W_j are trait means and dV_i, dW_j are trait ranges.      ##
+##                                                                           ##
+##    interact  <=>  |V_i - W_j|  <=  (dV_i + dW_j) / 2                      ##
+##                                                                           ##
+##  where V_i and W_j are trait means and dV_i, dW_j are trait ranges.       ##
 ##  Here dV = dW = d_range for all species (symmetric, fixed range).         ##
-##                                                                            ##
-##  Trait means are evolved under the OU model on independent phylogenies    ##
-##  for pollinators (L) and plants (H). The OU pull alpha determines how     ##
-##  tightly traits cluster around the optimum theta = 0.                     ##
-##                                                                            ##
-##  WHAT YOU SHOULD SEE                                                       ##
-##  Sorting the matrix by trait value reveals a diagonal band. The width     ##
-##  of the band increases with d_range and shrinks with alpha.               ##
-##                                                                            ##
-##  QUESTIONS                                                                 ##
-##  1. Why does sorting species by trait produce a band on the diagonal?      ##
-##  2. What happens to the band if you double d_range?                        ##
-##  3. Replace OU with BM (set alpha = 0). How does the matrix change?        ##
-##                                                                            ##
 ################################################################################
 
-library(ape)
-library(MASS)
-library(igraph)
-library(reshape2)
+#rm(list = ls())
 
-set.seed(7)
+#packages
+require(bipartite)
 
-# --- Parameters ---
-n_L     <- 15     # number of pollinators
-n_H     <- 15     # number of plants
-alpha_L <- 0.5    # OU pull for pollinators
-alpha_H <- 0.5    # OU pull for plants
-sigma2  <- 0.8    # shared BM variance component
-theta   <- 0      # OU optimum (trait optimum for both guilds)
-d_range <- 0.8    # STC trait range (dV = dW for all species)
+set.seed(123)
 
-# --- A. Simulate phylogenies ---
-tree_L <- chronos(rtree(n_L), quiet = TRUE)
-tree_H <- chronos(rtree(n_H), quiet = TRUE)
+# Number of species
+n_resource <- 20
+n_consumer <- 20
 
-# --- B. Evolve traits under OU ---
-# OU covariance matrix (Hansen 1997)
-cov_OU <- function(tree, alpha, sigma2) {
-  D <- cophenetic(tree) / 2
-  n <- Ntip(tree)
-  V <- matrix(0, n, n)
-  for (i in seq_len(n)) for (j in seq_len(n)) {
-    t_min  <- min(max(D[i,]) / 2, max(D[j,]) / 2)
-    V[i,j] <- (sigma2 / (2 * alpha)) *
-                exp(-alpha * D[i,j]) * (1 - exp(-2 * alpha * t_min))
+
+# Generate traits
+
+# Mean trait values (uniformly distributed)
+V <- runif(n_resource, min = 0, max = 10)  # resources
+W <- runif(n_consumer, min = 0, max = 10)  # consumers
+
+# Trait variability (niche width)
+delta_V <- runif(n_resource, min = 0.05, max = 1)
+delta_W <- runif(n_consumer, min = 0.05, max = 1)
+
+# Build interaction matrix
+
+
+# Initialize matrix
+web <- matrix(0, nrow = n_resource, ncol = n_consumer)
+
+# Fill matrix using complementarity rule
+for (i in 1:n_resource) {
+  for (j in 1:n_consumer) {
+    
+    trait_distance <- abs(V[i] - W[j])
+    tolerance <- (delta_V[i] + delta_W[j]) / 2
+    
+    if (trait_distance <= tolerance) {
+      web[i, j] <- 1
+    }
   }
-  V + diag(1e-8, n)
 }
 
-Sig_L <- if (alpha_L == 0) vcv(tree_L) * sigma2 + diag(1e-8, n_L)
-         else cov_OU(tree_L, alpha_L, sigma2)
-Sig_H <- if (alpha_H == 0) vcv(tree_H) * sigma2 + diag(1e-8, n_H)
-         else cov_OU(tree_H, alpha_H, sigma2)
 
-trait_L <- as.vector(mvrnorm(1, rep(theta, n_L), Sig_L))
-trait_H <- as.vector(mvrnorm(1, rep(theta, n_H), Sig_H))
-names(trait_L) <- paste0("L_", sprintf("%03d", seq_len(n_L)))
-names(trait_H) <- paste0("H_", sprintf("%03d", seq_len(n_H)))
+#Visualize network
+#As a adjacency matrix
+image(web, main = "Bipartite Interaction Matrix",
+      xlab = "Consumers", ylab = "Resources",
+      col = c("white", "black"))
 
-# --- C. Build network under the STC rule ---
-# interact if trait intervals overlap: |V_i - W_j| <= (dV_i + dW_j) / 2 = d_range
-web <- outer(trait_L, trait_H,
-             FUN = function(x, y) as.integer(abs(x - y) <= d_range))
-dimnames(web) <- list(names(trait_L), names(trait_H))
-
-# --- D. Patch isolated species (at least one link per species) ---
-# This is a biological constraint: every species must have at least one partner.
-# We assign the closest trait-match partner to any isolated species.
-for (h in which(colSums(web) == 0))
-  web[which.min(abs(trait_L - trait_H[h])), h] <- 1
-for (l in which(rowSums(web) == 0))
-  web[l, which.min(abs(trait_H - trait_L[l]))] <- 1
-
-cat(sprintf("Network: %d x %d  |  links = %d  |  connectance = %.3f\n",
-            n_L, n_H, sum(web), sum(web) / (n_L * n_H)))
-
-# --- E. Plot 1: interaction matrix sorted by trait ---
-L_ord <- names(sort(trait_L))
-H_ord <- names(sort(trait_H))
-df_mat <- melt(web, varnames = c("pollinator", "plant"), value.name = "interaction")
-df_mat$pollinator <- factor(df_mat$pollinator, levels = rev(L_ord))
-df_mat$plant      <- factor(df_mat$plant,      levels = H_ord)
-
-print(
-  ggplot(df_mat, aes(x = plant, y = pollinator, fill = factor(interaction))) +
-    geom_tile(colour = "white", linewidth = 0.4) +
-    scale_fill_manual(values = c("0" = "grey93", "1" = "#1a6faf"),
-                      labels = c("no interaction", "interaction"), name = "") +
-    labs(
-      title    = "Task 3A -- STC interaction matrix (species sorted by trait value)",
-      subtitle = sprintf("Connectance = %.3f  |  alpha = %.1f  |  d_range = %.1f",
-                         sum(web) / (n_L * n_H), alpha_L, d_range),
-      x = "Plant species  ->  increasing trait H",
-      y = "Pollinator species  ->  increasing trait L"
-    ) +
-    theme_bw(base_size = 13) +
-    theme(plot.title = element_text(face = "bold"),
-          plot.subtitle = element_text(colour = "grey40"),
-          axis.text = element_blank(), axis.ticks = element_blank(),
-          panel.grid = element_blank(), legend.position = "bottom")
-)
-
-# --- F. Plot 2: trait distributions of both guilds ---
-df_traits <- rbind(data.frame(guild = "Pollinator", trait = trait_L),
-                   data.frame(guild = "Plant",      trait = trait_H))
-
-print(
-  ggplot(df_traits, aes(x = trait, colour = guild, fill = guild)) +
-    geom_density(alpha = 0.25, linewidth = 1.0) +
-    geom_rug(alpha = 0.8, linewidth = 0.6) +
-    scale_colour_manual(values = c(Pollinator = "#e76f51", Plant = "#2a9d8f")) +
-    scale_fill_manual(  values = c(Pollinator = "#e76f51", Plant = "#2a9d8f")) +
-    labs(title    = "Task 3B -- Trait distributions of pollinators and plants",
-         subtitle = "Rug marks = individual species trait values (evolved under OU)",
-         x = "Trait value", y = "Density", colour = "Guild", fill = "Guild") +
-    theme_bw(base_size = 13) +
-    theme(plot.title = element_text(face = "bold"),
-          plot.subtitle = element_text(colour = "grey40"),
-          panel.grid.minor = element_blank())
-)
-
-# --- G. Plot 3: bipartite graph with species positioned by trait rank ---
-g       <- graph_from_biadjacency_matrix(web)
-v_names <- V(g)$name
-is_H    <- grepl("^H_", v_names)
-pol_idx <- which(!is_H); pl_idx <- which(is_H)
-ly      <- numeric(vcount(g))
-ly[pol_idx[order(trait_L[v_names[pol_idx]])]] <- seq(0.05, 0.95, length.out = n_L)
-ly[pl_idx[ order(trait_H[v_names[pl_idx]])]]  <- seq(0.05, 0.95, length.out = n_H)
-
-plot(g,
-     layout             = cbind(ifelse(is_H, 1, 0), ly),
-     vertex.color       = ifelse(is_H, "#2a9d8f", "#e76f51"),
-     vertex.size        = 9,
-     vertex.label       = NA,
-     vertex.frame.color = "white",
-     edge.color         = adjustcolor("grey40", 0.4),
-     edge.width         = 1.2,
-     main               = "Task 3C -- Bipartite STC network (ranked by trait, low = bottom)")
-legend("top", legend = c("Pollinator", "Plant"), horiz = TRUE,
-       pch = 21, pt.bg = c("#e76f51", "#2a9d8f"),
-       pt.cex = 1.8, bty = "n", cex = 0.95)
+#As a graph
+plotweb(web, method = "normal", text.rot = 90)
