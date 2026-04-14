@@ -30,7 +30,7 @@ require(bipartite)
 # -------------------------------
 # 2. Set random seed (reproducibility)
 # -------------------------------
-set.seed(12)
+set.seed(123)
 
 
 # -------------------------------
@@ -88,7 +88,7 @@ for (i in 1:n_resource) {
 # -------------------------------
 
 image(web,
-      main = "Bipartite Interaction Matrix",
+      main = "TASK 3 - Bipartite Interaction Matrix",
       xlab = "Consumers",
       ylab = "Resources",
       col = c("white", "black"))
@@ -99,3 +99,4 @@ image(web,
 # -------------------------------
 
 plotweb(web, method = "normal", text.rot = 90)
+

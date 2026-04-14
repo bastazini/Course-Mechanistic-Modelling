@@ -45,8 +45,8 @@ sigma2  <- 0.8 # BM variance rate
 theta   <- 1  #OU optimum for both guilds
 
 # Within-species variability (trait range / tolerance)
-delta_L <-runif(n_L, 0.05, 0.75)
-delta_H <- runif(n_H, 0.05, 0.75)
+delta_L <-runif(n_L, 0.05, 0.1)
+delta_H <- runif(n_H, 0.05, 0.1)
 
 # -------------------------------
 # 4. Simulate phylogenies

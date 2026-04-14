@@ -60,7 +60,7 @@ set.seed(123)
 # 3. Parameters
 # -------------------------------
 
-metric_name <- "links per species"
+metric_name <- "modularity"
 # Network-level property to evaluate.
 # "links per species" captures overall interaction density.
 
@@ -259,7 +259,7 @@ print(
     # Diverging scale highlights low vs high connectivity regimes
     
     labs(
-      title = "Joint effect of stabilising selection and trait matching",
+      title = "TASK 5 - Joint effect of stabilising selection and trait matching",
       x = "Trait tolerance (delta_max)",
       y = "Stabilising selection strength (alpha)"
     ) +

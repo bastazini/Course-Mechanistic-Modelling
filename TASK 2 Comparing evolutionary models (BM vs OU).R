@@ -115,7 +115,7 @@ matplot(traj,
 # 8. Add OU optimum reference line
 # -------------------------------
 
-abline(h = theta, lty = 2, col = "black", lwd = 1)
+abline(h = theta, lty = 2, col = "black", lwd = 3)
 
 
 # -------------------------------
