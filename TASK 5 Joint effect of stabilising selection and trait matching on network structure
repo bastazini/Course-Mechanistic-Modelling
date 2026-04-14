@@ -38,222 +38,235 @@
 ##                                                                            ##
 ################################################################################
 
-library(bipartite)   # networklevel(): compute network-level metrics
-library(ggplot2)     # heatmap plot
+# -------------------------------
+# 0. Clean workspace
+# -------------------------------
+rm(list = ls())
 
 
-# =============================================================================
-# PARAMETERS
-# =============================================================================
+# -------------------------------
+# 1. Load required packages
+# -------------------------------
+library(ape)        
+library(bipartite)  
+library(ggplot2)    
 
-set.seed(99)
+# -------------------------------
+# 2. Set seed
+# -------------------------------
+set.seed(123)
 
-# --- Metric ------------------------------------------------------------------
-# The network-level property to measure. Change this one line to explore
-# a different aspect of network structure.
+# -------------------------------
+# 3. Parameters
+# -------------------------------
+
 metric_name <- "links per species"
+# Network-level property to evaluate.
+# "links per species" captures overall interaction density.
 
-# --- Community size ----------------------------------------------------------
-n_L <- 20   # number of pollinator species (rows of interaction matrix)
-n_H <- 20   # number of plant species (cols of interaction matrix)
+n_L <- 20  # consumer species (rows)
+n_H <- 20  # resource (columns)
+# Defines bipartite network size. Larger values increase realism but cost.
 
-# --- Replicates --------------------------------------------------------------
-n_rep <- 100   # independent networks simulated per grid cell
-              # increase to 50+ for smoother heatmap cells
+n_rep <- 100
+# Number of stochastic replicates per parameter combination.
+# Higher values → smoother heatmaps, lower variance.
 
-# --- OU stationary distribution parameters -----------------------------------
-# sigma2: BM variance component of the OU model.
-# Together with alpha it determines the spread of traits at stationarity:
-#   sd of traits = sqrt(sigma2 / (2 * alpha))
-# Keep sigma2 fixed when comparing across alpha values so that only
-# selection strength varies, not the raw noise level.
 sigma2 <- 1.0
+# Brownian motion variance component.
+# Controls evolutionary noise intensity in OU process.
 
-# theta_L, theta_H: OU optima for pollinators and plants respectively.
-# When theta_L == theta_H the two guilds evolve toward the same trait value,
-# maximising the chance of trait overlap and interaction.
-# Setting theta_L != theta_H shifts the guilds apart and can produce very
-# sparse networks even at high alpha -- try e.g. theta_L=0, theta_H=1.
 theta_L <- 0
 theta_H <- 0
+# OU optima: both guilds evolve toward same adaptive peak.
+# Setting them equal maximises trait overlap potential.
 
-# --- Grid axes ---------------------------------------------------------------
-# alpha_grid: values of OU pull strength to sweep (y-axis of heatmap).
-# Must be strictly positive -- alpha=0 is pure BM which has no stationary
-# distribution and cannot be used with the rnorm approach here.
-# Values above ~8 produce near-identical results (traits fully constrained).
 alpha_grid <- c(0.1, 0.5, 1, 2, 4, 8)
+# Strength of stabilising selection:
+# low alpha → wide trait dispersion
+# high alpha → strong constraint around theta (trait clustering)
 
-# delta_max_grid: upper bound of per-species trait range (x-axis of heatmap).
-# Each species i gets delta_i ~ Uniform(delta_min, delta_max).
-# Low delta_max  -> community of specialists (narrow ranges, few partners).
-# High delta_max -> community of generalists (wide ranges, many partners).
 delta_max_grid <- c(0.1, 0.3, 0.6, 0.9, 1.2)
-
-# delta_min: lower bound of per-species trait range.
-# Fixed across all simulations. Keep small so every species has some
-# non-zero range and the STC rule can produce at least a few links.
 delta_min <- 0.05
+# STC trait tolerance:
+# each species has its own interaction “width”
+# small values → specialists
+# large values → generalists
 
+# -------------------------------
+# 4. Phylogenies (fixed across simulations)
+# -------------------------------
+tree_L <- rcoal(n_L)
+tree_H <- rcoal(n_H)
 
-# =============================================================================
-# SIMULATION FUNCTION
-# =============================================================================
-# Simulates one STC network under the OU stationary distribution and returns
-# a single value of the chosen network metric.
-#
-# Trait means are drawn independently from Normal(theta, sigma2 / (2*alpha)).
-# This is the stationary distribution of the OU process -- no phylogeny is
-# needed because we are not modelling phylogenetic covariance between species,
-# only the marginal distribution of traits under stabilising selection.
-#
-# Arguments:
-#   n_L, n_H    -- community sizes
-#   alpha_L     -- OU pull for pollinators (must be > 0)
-#   alpha_H     -- OU pull for plants (must be > 0)
-#   sigma2      -- BM variance component (shared by both guilds)
-#   theta_L     -- OU optimum for pollinators
-#   theta_H     -- OU optimum for plants
-#   delta_min   -- lower bound of per-species trait range
-#   delta_max   -- upper bound of per-species trait range
-#   metric      -- metric name string for bipartite::networklevel()
-#
-# Returns: a single numeric value (NA if bipartite throws an error)
+tree_L$tip.label <- sprintf("L_%03d", seq_len(n_L))
+tree_H$tip.label <- sprintf("H_%03d", seq_len(n_H))
 
-simulate_metric <- function(n_L, n_H,
-                             alpha_L, alpha_H,
-                             sigma2,
-                             theta_L, theta_H,
-                             delta_min, delta_max,
-                             metric) {
+# Coalescent trees simulate shared evolutionary history.
+# Fixing trees across runs isolates effects of alpha and delta.
 
-  # --- Draw trait means from OU stationary distribution --------------------
-  # Each species independently draws its trait mean from the distribution
-  # that the OU process converges to: Normal(theta, sigma2 / (2*alpha)).
-  # sd = sqrt(sigma2 / (2*alpha)):
-  #   high alpha -> small sd -> traits cluster near theta
-  #   low alpha  -> large sd -> traits spread widely around theta
-  trait_L <- rnorm(n_L, mean = theta_L, sd = sqrt(sigma2 / (2 * alpha_L)))
-  trait_H <- rnorm(n_H, mean = theta_H, sd = sqrt(sigma2 / (2 * alpha_H)))
-
-  # --- Draw per-species trait ranges (delta) --------------------------------
-  # Each species independently gets a variability range delta.
-  # This determines how selective vs. generalised each species is in STC:
-  #   narrow delta -> specialist (interacts only with very close matches)
-  #   wide delta   -> generalist (tolerates a wider range of partners)
+# -------------------------------
+# 5. Simulation function
+# -------------------------------
+simulate_metric <- function(alpha_L, alpha_H,
+                            delta_min, delta_max,
+                            metric) {
+  
+  # -------------------------------
+  # 5.1 Trait evolution (OU model on phylogeny)
+  # -------------------------------
+  trait_L <- rTraitCont(tree_L,
+                        model = if (alpha_L == 0) "BM" else "OU",
+                        alpha = alpha_L,
+                        sigma = sqrt(sigma2),
+                        theta = theta_L)
+  
+  trait_H <- rTraitCont(tree_H,
+                        model = if (alpha_H == 0) "BM" else "OU",
+                        alpha = alpha_H,
+                        sigma = sqrt(sigma2),
+                        theta = theta_H)
+  
+  # Each species inherits a trait value evolving along its phylogeny.
+  # OU introduces stabilising selection:
+  #   - high alpha → convergence to theta
+  #   - low alpha → high variance among species
+  
+  # -------------------------------
+  # 5.2 Species-specific trait tolerance (STC variability)
+  # -------------------------------
   delta_L <- runif(n_L, delta_min, delta_max)
   delta_H <- runif(n_H, delta_min, delta_max)
-
-  # --- Build interaction matrix under the STC rule -------------------------
-  # I_ij = 1  if  |V_i - W_j|  <  0.5 * (delta_L_i + delta_H_j)
-  # I_ij = 0  otherwise
-  web <- matrix(0L, nrow = n_L, ncol = n_H)
-  for (i in seq_len(n_L))
-    for (j in seq_len(n_H))
-      if (abs(trait_L[i] - trait_H[j]) < 0.5 * (delta_L[i] + delta_H[j]))
-        web[i, j] <- 1L
-
-  # --- Patch isolated species ----------------------------------------------
-  # Every species must have at least one partner (biological constraint).
-  # We connect isolated species to their closest trait-match partner,
-  # keeping the assignment consistent with the STC logic.
+  
+  # Each species has a trait "interaction width".
+  # This introduces ecological heterogeneity:
+  #   - small delta → specialist
+  #   - large delta → generalist
+  
+  # -------------------------------
+  # 5.3 Interaction matrix (Santamaría STC rule)
+  # -------------------------------
+  web <- outer(seq_len(n_L), seq_len(n_H),
+               Vectorize(function(i, j)
+                 as.integer(
+                   abs(trait_L[i] - trait_H[j]) <=
+                     0.5 * (delta_L[i] + delta_H[j])
+                 )
+               ))
+  
+  # Core ecological assumption:
+  # interaction occurs if trait distributions overlap.
+  #
+  # This is equivalent to:
+  # |mean difference| <= half-sum of trait ranges
+  #
+  # → species interact if their “niches overlap”
+  
+  # -------------------------------
+  # 5.4 Ensure no isolated species
+  # -------------------------------
   for (j in which(colSums(web) == 0))
     web[which.min(abs(trait_L - trait_H[j])), j] <- 1L
+  
   for (i in which(rowSums(web) == 0))
     web[i, which.min(abs(trait_H - trait_L[i]))] <- 1L
-
-  # --- Compute chosen metric -----------------------------------------------
-  # tryCatch prevents a single degenerate network from crashing the loop.
+  
+  # Ecological constraint:
+  # every species must have at least one interaction
+  # → avoids degenerate rows/columns in network metrics
+  
+  # -------------------------------
+  # 5.5 Compute network metric
+  # -------------------------------
   val <- tryCatch(
     networklevel(web, index = metric),
-    error   = function(e) NA_real_,
-    warning = function(w) suppressWarnings(networklevel(web, index = metric))
+    error = function(e) NA_real_
   )
-
+  
+  # Defensive programming:
+  # prevents simulation failure from stopping full grid run
+  
   as.numeric(val[1])
 }
 
-
-# =============================================================================
-# RUN THE 2D GRID
-# =============================================================================
-
-cat(sprintf("Running %d total simulations (%d alpha x %d delta_max x %d reps)...\n",
-            length(alpha_grid) * length(delta_max_grid) * n_rep,
-            length(alpha_grid), length(delta_max_grid), n_rep))
+# -------------------------------
+# 6. Grid simulation
+# -------------------------------
+cat(sprintf("Running %d simulations...\n",
+            length(alpha_grid) * length(delta_max_grid) * n_rep))
 
 grid_results <- do.call(rbind, lapply(alpha_grid, function(a) {
   do.call(rbind, lapply(delta_max_grid, function(dmax) {
-
+    
     vals <- replicate(n_rep,
                       simulate_metric(
-                        n_L       = n_L,
-                        n_H       = n_H,
-                        alpha_L   = a,
-                        alpha_H   = a,
-                        sigma2    = sigma2,
-                        theta_L   = theta_L,
-                        theta_H   = theta_H,
+                        alpha_L = a,
+                        alpha_H = a,
                         delta_min = delta_min,
                         delta_max = dmax,
-                        metric    = metric_name
+                        metric = metric_name
                       ))
-
+    
     data.frame(
       alpha     = a,
       delta_max = dmax,
       mean_val  = mean(vals, na.rm = TRUE),
-      se_val    = sd(vals,   na.rm = TRUE) / sqrt(sum(!is.na(vals)))
+      se_val    = sd(vals, na.rm = TRUE) / sqrt(sum(!is.na(vals)))
     )
+    
+    # Aggregation:
+    # mean → expected network structure
+    # SE   → uncertainty across stochastic replicates
   }))
 }))
 
 cat("Done.\n")
 
+# -------------------------------
+# 7. Format axes for plotting
+# -------------------------------
+grid_results$alpha_label <- factor(grid_results$alpha,
+                                   levels = alpha_grid)
 
-# =============================================================================
-# HEATMAP
-# =============================================================================
+grid_results$delta_label <- factor(grid_results$delta_max,
+                                   levels = delta_max_grid)
 
-grid_results$alpha_label <- factor(
-  as.character(grid_results$alpha),
-  levels = as.character(alpha_grid)
-)
+# Ensures correct ordering in heatmap (not alphabetical)
 
-grid_results$delta_label <- factor(
-  as.character(grid_results$delta_max),
-  levels = as.character(delta_max_grid)
-)
-
+# -------------------------------
+# 8. Heatmap visualization
+# -------------------------------
 print(
   ggplot(grid_results,
-         aes(x = delta_label, y = alpha_label, fill = mean_val)) +
-    geom_tile(colour = "white", linewidth = 0.6) +
+         aes(x = delta_label,
+             y = alpha_label,
+             fill = mean_val)) +
+    
+    geom_tile(color = "white") +
+    # Grid cells represent parameter combinations
+    
     geom_text(aes(label = round(mean_val, 2)),
-              size = 4, colour = "white", fontface = "bold") +
+              size = 4, color = "white") +
+    # Overlay numeric values for interpretability
+    
     scale_fill_gradient2(
-      low      = "#2166ac",
-      mid      = "#ffffbf",
-      high     = "#d73027",
+      low = "#2166ac",
+      mid = "#ffffbf",
+      high = "#d73027",
       midpoint = median(grid_results$mean_val, na.rm = TRUE),
-      name     = metric_name
+      name = metric_name
     ) +
+    # Diverging scale highlights low vs high connectivity regimes
+    
     labs(
-      title    = paste0("Task 5 -- Joint effect of stabilising selection and ",
-                        "trait matching on ", metric_name),
-      subtitle = paste0(n_rep, " replicates per cell  |  ",
-                        n_L, " x ", n_H, " network  |  ",
-                        "sigma2 = ", sigma2,
-                        "  |  theta(L) = ", theta_L,
-                        "  |  theta(H) = ", theta_H),
-      x = "Trait range upper bound  delta_max  (low = specialist community)",
-      y = "OU pull strength  alpha  (high = strong stabilising selection)"
+      title = "Joint effect of stabilising selection and trait matching",
+      x = "Trait tolerance (delta_max)",
+      y = "Stabilising selection strength (alpha)"
     ) +
+    
     theme_bw(base_size = 13) +
     theme(
-      plot.title       = element_text(face = "bold"),
-      plot.subtitle    = element_text(colour = "grey40"),
-      panel.grid       = element_blank(),
-      legend.position  = "right"
+      panel.grid = element_blank(),
+      plot.title = element_text(face = "bold")
     )
 )
