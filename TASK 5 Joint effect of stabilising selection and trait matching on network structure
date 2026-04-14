@@ -1,12 +1,12 @@
 ################################################################################
 ##                                                                            ##
-##  TASK 7                                                                    ##
+##  TASK 5                                                                    ##
 ##  Joint effect of stabilising selection and trait matching on network       ##
 ##  structure                                                                 ##
 ##                                                                            ##
-##  BACKGROUND                                                                ##
+##  BACKGROUND                                                               ##
 ##  Two parameters jointly determine the structure of an STC network:        ##
-##                                                                            ##
+##                                                                           ##
 ##  1. STABILISING SELECTION (alpha, the OU pull parameter)                  ##
 ##     Under the OU model at stationarity, trait values are drawn from:      ##
 ##       X ~ Normal(theta,  sigma2 / (2 * alpha))                            ##
@@ -14,22 +14,18 @@
 ##     many trait pairs overlap -> dense, non-selective network.             ##
 ##     Low alpha -> large variance -> traits spread widely -> only closely   ##
 ##     matched species interact -> sparse, modular network.                  ##
-##     Note: alpha = 0 (pure BM) has no stationary distribution and is      ##
+##     Note: alpha = 0 (pure BM) has no stationary distribution and is       ##
 ##     therefore excluded from this task.                                    ##
-##                                                                            ##
+##                                                                           ##
 ##  2. TRAIT MATCHING (delta_max, upper bound of per-species trait range)    ##
 ##     In the STC rule, species i and j interact if:                         ##
-##       |V_i - W_j|  <  0.5 * (delta_L_i + delta_H_j)                     ##
+##       |V_i - W_j|  <  0.5 * (delta_L_i + delta_H_j)                       ##
 ##     Each species is assigned a range delta drawn from                     ##
 ##       Uniform(delta_min, delta_max)                                       ##
 ##     Wide delta -> generalist (interacts with many partners).              ##
 ##     Narrow delta -> specialist (interacts only with close trait matches). ##
 ##     delta_max sets the ceiling of this variability across the community.  ##
-##                                                                            ##
-##  The heatmap shows how the chosen network metric responds to both         ##
-##  parameters simultaneously. Each cell is the mean over n_rep independent  ##
-##  simulated networks.                                                       ##
-##                                                                            ##
+##                                                                           ##
 ##  AVAILABLE METRICS (set metric_name below)                                ##
 ##  Any metric accepted by bipartite::networklevel(index = ...):             ##
 ##    "connectance"        -- proportion of realised links                   ##
@@ -38,17 +34,7 @@
 ##    "H2"                 -- network-level specialisation (0 = generalist)  ##
 ##    "links per species"  -- mean degree across both guilds                 ##
 ##  Run networklevel(web, index = "ALLBUTDD") on a test web to see all.      ##
-##                                                                            ##
-##  QUESTIONS                                                                 ##
-##  1. Which corner of the heatmap gives the highest value of your metric?   ##
-##     What ecological scenario does that corner represent?                  ##
-##  2. Is the effect of alpha stronger when delta_max is low or high?        ##
-##     This tells you whether selection and matching are redundant or        ##
-##     complementary drivers of network structure.                           ##
-##  3. Change metric_name to a different metric and regenerate the heatmap.  ##
-##     Do alpha and delta_max have the same relative influence?              ##
-##  4. Set theta_L != theta_H so the two guilds evolve toward different      ##
-##     trait optima. What happens to the network?                            ##
+##                                                                           ##
 ##                                                                            ##
 ################################################################################
 
