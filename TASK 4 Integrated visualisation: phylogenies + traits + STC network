@@ -19,13 +19,6 @@
 ##  alpha_L, alpha_H  -- OU pull for each guild (try 0 vs 5)                ##
 ##  delta_min/max     -- range of species variability (try narrow vs wide)   ##
 ##  sigma2            -- BM variance component                               ##
-##                                                                            ##
-##  QUESTIONS                                                                 ##
-##  1. Set alpha_L = 0 and alpha_H = 5. How does the matrix change?          ##
-##  2. Increase delta_max. What happens to the band width?                   ##
-##  3. What does it mean ecologically when the two phylogenies look very      ##
-##     different in their tip colour spread?                                  ##
-##                                                                            ##
 ################################################################################
 
 ################################################################################
