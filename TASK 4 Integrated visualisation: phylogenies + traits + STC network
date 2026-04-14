@@ -28,6 +28,26 @@
 ##                                                                            ##
 ################################################################################
 
+################################################################################
+##                                                                            ##
+##  TASK 4                                                                    ##
+##  Integrating phylogenies + traits + Single Trait complementary models      ##
+##                                                                            ##
+##  BACKGROUND                                                                ##
+##  Two guilds (L = pollinators, H = plants) evolve a single continuous       ##
+##  trait along independent phylogenies under an Ornstein-Uhlenbeck (OU)      ##
+##  process. Interactions are determined by the Single-Trait                  ##
+##  Complementarity (STC) rule: species i and j interact if their trait       ##
+##  means are within a fixed tolerance delta:                                 ##
+##                                                                            ##
+##    I_ij = 1  iff  |V_i - W_j| <= delta                                     ##
+##                                                                            ##
+##  PARAMETERS TO EXPLORE                                                     ##
+##  alpha_L, alpha_H -- OU pull for each guild (0 = BM, 5 = strong pull)      ##
+##  sigma2           -- BM variance component                                 ##
+##  delta            -- fixed interaction tolerance (controls connectance)    ##
+##                                                                            ##
+################################################################################
 
 # -------------------------------
 # 0. Clean workspace
