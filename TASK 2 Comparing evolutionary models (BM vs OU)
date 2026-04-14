@@ -12,54 +12,50 @@
 ##  alpha controls the strength of stabilising selection. Large alpha ->      ##
 ##  strong pull, trait stays near theta. alpha = 0 recovers BM.             ##
 ##                                                                            ##
-##  We simulate 5 BM trajectories with increasing sigma2 (red palette) and   ##
-##  5 OU trajectories with increasing alpha at fixed sigma2 (blue palette).  ##
-##                                                                            ##
-##  WHAT YOU SHOULD SEE                                                       ##
-##  Red lines (BM) diverge indefinitely. Darker red = faster divergence.     ##
-##  Blue lines (OU) are pulled back to the dashed optimum. Darker blue =     ##
-##  stronger pull = tighter oscillation around theta.                        ##
-##                                                                            ##
-##  QUESTIONS                                                                 ##
-##  1. What is the stationary variance of the OU process? (sigma2 / 2*alpha) ##
-##     Verify by computing var() of the last 50 steps for each blue line.    ##
-##  2. Set alpha very large (e.g. 0.9). What does the trajectory look like?  ##
+##  We simulate 10 BM trajectories with increasing sigma2 (red palette) and   ##
+##  10 OU trajectories with increasing alpha at fixed sigma2 (blue palette).  ##
 ##                                                                            ##
 ################################################################################
 
+rm(list=ls()) #Clean workspace
+
 set.seed(12)
 
-n_steps <- 20
+# Defyning simulation parameters 
+n_steps <- 200
 n_traj  <- 200       # trajectories per model
 theta   <- 0        # OU optimum
 
-# BM: vary sigma2 (variance per step)
-sigma2_bm <- seq(0.02, 0.15, length.out = n_traj)
+#Parameter gradients
+sigma2_bm <- seq(0.02, 0.15, length.out = n_traj)  # BM: increasing variance per step
+alpha_ou  <- seq(0.05, 0.3,  length.out = n_traj)  # OU: increasing selection strength
+sigma2_ou <- 0.1                                    # OU: fixed noise variance
 
-# OU: vary alpha (selection strength) at fixed sigma2
-alpha_ou  <- seq(0.05, 0.3, length.out = n_traj)
-sigma2_ou <- 0.1
+#Pre-allocate trajectory matrix
 
 # Columns 1:n_traj = BM, columns (n_traj+1):(2*n_traj) = OU
 traj <- matrix(0, nrow = n_steps, ncol = n_traj * 2)
 
 for (i in seq_len(n_traj)) {
   
-  # BM: cumulative sum of N(0, sigma2) increments
+  # BM: cumulative sum of i.i.d. N(0, sigma2) increments — variance grows as sigma2 * t
   traj[, i] <- cumsum(rnorm(n_steps, mean = 0, sd = sqrt(sigma2_bm[i])))
-  
-  # OU: Euler-Maruyama, reset starting value for each trajectory
-  x <- 0
-  traj[1, i + n_traj] <- x
+
+  # OU: Euler-Maruyama discretisation of the SDE, starting at trait value 0 
+x <- 0  
+traj[1, i + n_traj] <- x
   for (t in 2:n_steps) {
+    # Deterministic pull towards theta (strength = alpha) + stochastic noise
     x <- x + alpha_ou[i] * (theta - x) + rnorm(1, mean = 0, sd = sqrt(sigma2_ou))
     traj[t, i + n_traj] <- x
   }
 }
 
-cols_bm <- colorRampPalette(c("#fcbba1", "#a50f15"))(n_traj)  # light to dark red
-cols_ou <- colorRampPalette(c("#c6dbef", "#08306b"))(n_traj)  # light to dark blue
+# Colour palettes: light = weak parameter, dark = strong parameter
+cols_bm <- colorRampPalette(c("#fcbba1", "#a50f15"))(n_traj)  # light to dark red (BM)
+cols_ou <- colorRampPalette(c("#c6dbef", "#08306b"))(n_traj)  # light to dark blue (OU)
 
+# Plot all trajectories together
 matplot(traj,
         type = "l",
         col  = c(cols_bm, cols_ou),
@@ -69,11 +65,15 @@ matplot(traj,
         ylab = "Trait value",
         main = "Task 2 -- BM (red) vs OU (blue): trait trajectories")
 
+# Adding a horizontal line marking the OU optimum
 abline(h = theta, lty = 2, col = "black", lwd = 1)
+
+# Label the optimum line in the bottom-right area
 text(x = n_steps * 0.98, y = theta + 0.05,
      labels = paste0("optimum theta = ", theta),
      adj = 1, cex = 0.8, col = "grey30")
 
+# Legend: one entry per trajectory, showing the parameter value used
 legend("topleft",
        legend = c(paste0("BM  sigma2 = ", round(sigma2_bm, 3)),
                   paste0("OU  alpha = ",  round(alpha_ou,  2))),
