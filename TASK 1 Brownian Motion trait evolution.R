@@ -80,6 +80,8 @@ cols <- hcl.colors(n_drift_levels, "Temps")
 # 7. Plot trajectories
 # -------------------------------
 
+par(xpd = TRUE, mar = c(5, 4, 4, 8))  # increase right margin
+
 matplot(traj,
         type = "l",
         col  = cols,
@@ -93,11 +95,14 @@ matplot(traj,
 # -------------------------------
 # 8. Add legend
 # -------------------------------
-
-legend("bottomleft",
+legend("topright",
+       inset = c(-0.25, 0),   # pushes legend outside plot region
        legend = round(sigma2_values, 3),
        col    = cols,
        lty    = 1,
        lwd    = 2,
        title  = "sigma2",
        cex    = 0.8)
+
+
+

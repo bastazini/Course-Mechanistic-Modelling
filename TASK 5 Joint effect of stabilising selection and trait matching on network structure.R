@@ -1,7 +1,7 @@
 ################################################################################
 ##                                                                            ##
 ##  TASK 5                                                                    ##
-##  Joint effect of stabilising selection and trait matching on network       ##
+##  Joint effect of stabilizing selection and trait matching on network       ##
 ##  structure                                                                 ##
 ##                                                                            ##
 ##  BACKGROUND                                                               ##
@@ -60,7 +60,7 @@ set.seed(123)
 # 3. Parameters
 # -------------------------------
 
-metric_name <- "modularity"
+metric_name <- "links per species"
 # Network-level property to evaluate.
 # "links per species" captures overall interaction density.
 
