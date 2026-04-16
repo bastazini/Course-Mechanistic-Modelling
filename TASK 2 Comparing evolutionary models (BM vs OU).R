@@ -1,7 +1,7 @@
 ################################################################################
 ##                                                                            ##
 ##  TASK 2                                                                    ##
-##  Brownian Motion vs Ornstein-Uhlenbeck -- comparing evolutionary models   ##
+##      ##
 ##                                                                            ##
 ##  BACKGROUND                                                                ##
 ##  BM: trait increments are i.i.d. N(0, sigma2). Variance grows without     ##
@@ -34,8 +34,8 @@ set.seed(12)
 # 2. Define simulation parameters
 # -------------------------------
 
-n_steps <- 200
-n_traj  <- 200       # trajectories per model
+n_steps <- 100
+n_traj  <- 10       # trajectories per model
 theta   <- 0         # OU optimum
 
 
@@ -101,6 +101,8 @@ cols_ou <- colorRampPalette(c("#c6dbef", "#08306b"))(n_traj)  # OU (blue)
 # 7. Plot trajectories
 # -------------------------------
 
+par(xpd = TRUE, mar = c(5, 4, 4, 10))  # enlarge right margin
+
 matplot(traj,
         type = "l",
         col  = c(cols_bm, cols_ou),
@@ -115,7 +117,10 @@ matplot(traj,
 # 8. Add OU optimum reference line
 # -------------------------------
 
-abline(h = theta, lty = 2, col = "black", lwd = 3)
+#abline(h = theta, lty = 2, col = "black", lwd = 3)
+segments(x0 = 1, x1 = n_steps,
+         y0 = theta, y1 = theta,
+         lty = 2, col = "black", lwd = 3)
 
 
 # -------------------------------
@@ -131,9 +136,14 @@ text(x = n_steps * 0.98, y = theta + 0.05,
 # 10. Add legend
 # -------------------------------
 
-legend("topleft",
+
+legend("topright",
+       inset = c(-0.35, 0),
        legend = c(paste0("BM  sigma2 = ", round(sigma2_bm, 3)),
                   paste0("OU  alpha = ",  round(alpha_ou,  2))),
        col    = c(cols_bm, cols_ou),
-       lty    = 1, lwd = 2, bty = "n", cex = 0.75,
+       lty    = 1,
+       lwd    = 2,
+       bty    = "n",
+       cex    = 0.7,
        title  = "Model and parameter")

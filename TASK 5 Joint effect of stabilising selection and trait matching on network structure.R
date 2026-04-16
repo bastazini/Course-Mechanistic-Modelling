@@ -76,8 +76,8 @@ sigma2 <- 1.0
 # Brownian motion variance component.
 # Controls evolutionary noise intensity in OU process.
 
-theta_L <- 0
-theta_H <- 0
+theta_L <- 10
+theta_H <- 10
 # OU optima: both guilds evolve toward same adaptive peak.
 # Setting them equal maximises trait overlap potential.
 

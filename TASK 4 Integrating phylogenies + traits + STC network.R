@@ -13,7 +13,7 @@
 ##    I_ij = 1  iff  |V_i - W_j| <= delta                                     ##
 ##                                                                            ##
 ##  PARAMETERS TO EXPLORE                                                     ##
-##  alpha_L, alpha_H -- OU pull for each guild (0 = BM, 5 = strong pull)      ##
+##  alpha_L, alpha_H -- OU pull for each guild (0 = BM, 10 = strong pull)      ##
 ##  sigma2           -- BM variance component                                 ##
 ##  delta            -- fixed interaction tolerance (controls connectance)    ##
 ##                                                                            ##
@@ -32,17 +32,17 @@ library(ape)
 # -------------------------------
 # 2. Set seed
 # -------------------------------
-set.seed(123)
+set.seed(12)
 
 # -------------------------------
 # 3. Define parameters
 # -------------------------------
 n_L     <- 10 # number of resource species
 n_H     <- 10 # number of consumer species
-alpha_L <- 5 # OU pull for resource species
-alpha_H <- 5 # OU pull for consumer species
+alpha_L <- 10 # OU pull for resource species
+alpha_H <- 10 # OU pull for consumer species
 sigma2  <- 0.8 # BM variance rate
-theta   <- 1  #OU optimum for both guilds
+theta   <- 10  #OU optimum for both guilds
 
 # Within-species variability (trait range / tolerance)
 delta_L <-runif(n_L, 0.05, 0.1)
@@ -167,6 +167,7 @@ image(x = seq_len(n_L),
       col = c("white", "#1a3a5c"),
       axes = FALSE)
 
+#cleanup plotting environment
 box()
 
 layout(1)
